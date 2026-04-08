@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, NativeModules, AppState,
+  View, StyleSheet, NativeModules, AppState, NativeEventEmitter,
   Keyboard, useWindowDimensions, SafeAreaView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -65,11 +65,18 @@ export default function YapifyScreen() {
             }
           }, 2000);
         } else {
-          // App is in foreground on launch - overlay starts hidden
-          // It will show when app is backgrounded via AppState listener
+          // Permission already granted - overlay will show when app is backgrounded
+          // Nothing to do here, AppState listener handles it
         }
       }
     })();
+
+    // Auto-record when opened from overlay dot
+    const emitter = new NativeEventEmitter();
+    const autoRecordSub = emitter.addListener('autoRecord', () => {
+      setFabState('EXPANDED');
+      setTimeout(() => handleStartRecording(), 300);
+    });
 
     // Hide overlay dot while app is open, show it when backgrounded
     const appState = AppState.addEventListener('change', (state) => {
@@ -77,7 +84,9 @@ export default function YapifyScreen() {
       if (state === 'active') {
         OverlayModule.stopOverlay();
       } else if (state === 'background') {
-        OverlayModule.startOverlay();
+        OverlayModule.hasPermission().then((granted: boolean) => {
+          if (granted) OverlayModule.startOverlay();
+        });
       }
     });
 
@@ -88,6 +97,7 @@ export default function YapifyScreen() {
 
     return () => {
       if (poll) clearInterval(poll);
+      autoRecordSub.remove();
       appState.remove();
       kbShow.remove();
       kbHide.remove();

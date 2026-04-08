@@ -1,13 +1,16 @@
 package com.jgil303.yapify
 import expo.modules.splashscreen.SplashScreenManager
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
+import com.facebook.react.bridge.Arguments
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 import expo.modules.ReactActivityDelegateWrapper
 
@@ -49,6 +52,30 @@ class MainActivity : ReactActivity() {
     * where moving root activities to background instead of finishing activities.
     * @see <a href="https://developer.android.com/reference/android/app/Activity#onBackPressed()">onBackPressed</a>
     */
+  override fun onNewIntent(intent: Intent?) {
+      super.onNewIntent(intent)
+      setIntent(intent)
+      if (intent?.getBooleanExtra("autoRecord", false) == true) {
+          emitAutoRecord()
+      }
+  }
+
+  override fun onResume() {
+      super.onResume()
+      if (intent?.getBooleanExtra("autoRecord", false) == true) {
+          intent.removeExtra("autoRecord")
+          emitAutoRecord()
+      }
+  }
+
+  private fun emitAutoRecord() {
+      try {
+          reactInstanceManager.currentReactContext
+              ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+              ?.emit("autoRecord", null)
+      } catch (_: Exception) {}
+  }
+
   override fun onUserLeaveHint() {
       try { super.onUserLeaveHint() } catch (_: Exception) {}
   }

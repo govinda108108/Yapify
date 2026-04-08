@@ -132,6 +132,7 @@ class OverlayService : Service() {
     private fun openYapify() {
         val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            putExtra("autoRecord", true)
         }
         intent?.let { startActivity(it) }
     }
