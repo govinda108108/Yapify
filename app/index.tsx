@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, NativeModules, AppState, NativeEventEmitter,
+  View, StyleSheet, NativeModules, AppState, DeviceEventEmitter,
   Keyboard, useWindowDimensions, SafeAreaView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -72,8 +72,7 @@ export default function YapifyScreen() {
     })();
 
     // Auto-record when opened from overlay dot
-    const emitter = new NativeEventEmitter();
-    const autoRecordSub = emitter.addListener('autoRecord', () => {
+    const autoRecordSub = DeviceEventEmitter.addListener('autoRecord', () => {
       setFabState('EXPANDED');
       setTimeout(() => handleStartRecording(), 300);
     });
