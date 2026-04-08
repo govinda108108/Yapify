@@ -156,9 +156,16 @@ yapify/
 
 **Phase 1 - WebView wrapper (DONE)**
 Wrap HTML prototype in native APK via EAS. Mic and API calls work through WebView. Installable on Android.
+- Native mic recording via expo-av (bypasses WebView sandbox block)
+- FAB draggable in all states: expanded, recording, mode tray
+- Keyboard-aware FAB: jumps to top half when keyboard opens, free movement otherwise
+- No-audio-detected error on empty recordings
+- No-API-key error shown instead of mock output
 
 **Phase 2 - Android overlay (IN PROGRESS)**
 Kotlin service draws floating dot over all other apps system-wide. Method channel bridges Kotlin to React Native JS.
+- Kotlin OverlayService, OverlayModule, OverlayPackage all written
+- Next: wire up JS-side hook in app/index.tsx to call OverlayModule.startOverlay() on launch after permission check
 
 **Phase 3 - Native UI**
 Rebuild Yapify screen natively in React Native. Replace WebView. Match HTML design exactly.
@@ -193,6 +200,9 @@ Desktop app via Electron or Tauri. Team and workspace features. Deep integration
 - **No em dashes** in any copy or comments
 - Keep code comments concise and clear
 - Match the HTML prototype's interaction model exactly before adding new features
-- The FAB dot must always stay in the top half of the screen (keyboard avoidance)
+- The FAB dot can be dragged anywhere on screen; it auto-jumps to the top half when the keyboard opens
 - Toast must use visualViewport to position above keyboard
-- API key is never hardcoded — always from user settings
+- API key is never hardcoded -- always from user settings
+
+## Screenshot access
+A watcher script runs automatically on startup that copies the latest Android screenshot to ~/yapify/latest-screenshot.png every 2 seconds. When the user sends just the letter "s" alone, or says "check screenshot", "look at screenshot", or similar, read ~/yapify/latest-screenshot.png for visual context.

@@ -74,23 +74,18 @@ class OverlayService : Service() {
         }
 
         overlayView = FrameLayout(this).apply {
-            addView(dot, FrameLayout.LayoutParams(48.dp, 48.dp).apply {
+            addView(dot, FrameLayout.LayoutParams(20.dp, 20.dp).apply {
                 gravity = Gravity.CENTER
             })
         }
 
-        // Round the dot via outline
-        dot.post {
-            dot.outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
-            dot.clipToOutline = true
-        }
         dot.background = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.OVAL
             setColor(Color.parseColor("#2ec4b6"))
         }
 
         params = WindowManager.LayoutParams(
-            64.dp, 64.dp,
+            36.dp, 36.dp,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT

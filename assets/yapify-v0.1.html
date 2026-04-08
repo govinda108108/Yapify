@@ -371,6 +371,49 @@ let currentModeId = 'default';
 let apiKey = '';
 let mediaRecorder = null;
 let audioChunks = [];
+let nativeAudioBlob = null;
+let nativeEditAudioBlob = null;
+
+// Listen for audio data sent back from React Native native recording bridge
+function handleNativeMessage(e) {
+  try {
+    const data = JSON.parse(e.data);
+    if (data.type === 'audioReady') {
+      const bytes = Uint8Array.from(atob(data.base64), c => c.charCodeAt(0));
+      nativeAudioBlob = new Blob([bytes], { type: 'audio/m4a' });
+      runPipeline();
+    } else if (data.type === 'editAudioReady') {
+      const bytes = Uint8Array.from(atob(data.base64), c => c.charCodeAt(0));
+      nativeEditAudioBlob = new Blob([bytes], { type: 'audio/m4a' });
+      runEditPipeline();
+    } else if (data.type === 'recordingError') {
+      showErr(data.message || 'No audio detected');
+      toEXPANDED();
+    }
+  } catch (_) {}
+}
+document.addEventListener('message', handleNativeMessage);
+window.addEventListener('message', handleNativeMessage);
+
+// When keyboard opens, push FAB into top half if it would be hidden
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const fab = document.getElementById('fab');
+    if (!fab) return;
+    const ph = phone.offsetHeight;
+    const vp = window.visualViewport;
+    const keyboardOpen = vp.height < ph * 0.75;
+    if (keyboardOpen) {
+      const fh = fab.offsetHeight;
+      const currentTop = parseInt(fab.style.top) || 0;
+      const maxY = ph / 2 - fh;
+      if (currentTop > maxY) {
+        fab.style.top = Math.max(50, maxY) + 'px';
+      }
+    }
+  });
+}
+
 let timerInterval = null;
 let timerSecs = 0;
 let pendingOutput = '';
@@ -386,6 +429,8 @@ let swipeActive = false;
 let swipePointerId = null;
 let swipeHoldTimer = null;
 let swipeLitChip = null;
+let bigDragMode = false;
+let bigDragStartX = 0, bigDragStartY = 0, bigFabStartLeft = 0, bigFabStartTop = 0;
 let chipRects = [];
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
@@ -522,6 +567,14 @@ function hideTray() {
   swipeLitChip = null;
 }
 
+// ─── Shared FAB move helper ───────────────────────────────────────────────────
+function moveFab(newLeft, newTop) {
+  const pw = phone.offsetWidth, ph = phone.offsetHeight;
+  const fw = fab.offsetWidth,   fh = fab.offsetHeight;
+  fab.style.left = Math.max(8, Math.min(pw - fw - 8, newLeft)) + 'px';
+  fab.style.top  = Math.max(50, Math.min(ph - fh - 8, newTop)) + 'px';
+}
+
 // ─── Small dot: tap → EXPANDED, drag → move FAB ──────────────────────────────
 dotSmall.addEventListener('pointerdown', e => {
   e.preventDefault();
@@ -548,12 +601,7 @@ function onSmallMove(e) {
   const dx = e.clientX - dragStartX;
   const dy = e.clientY - dragStartY;
   if (!dragMoved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) dragMoved = true;
-  if (dragMoved) {
-    const pw = phone.offsetWidth, ph = phone.offsetHeight;
-    const fw = fab.offsetWidth,   fh = fab.offsetHeight;
-    fab.style.left = Math.max(8, Math.min(pw - fw - 8, fabStartLeft + dx)) + 'px';
-    fab.style.top  = Math.max(50, Math.min(ph / 2 - fh, fabStartTop + dy)) + 'px';
-  }
+  if (dragMoved) moveFab(fabStartLeft + dx, fabStartTop + dy);
 }
 
 function onSmallUp(e) {
@@ -567,8 +615,31 @@ function onSmallUp(e) {
 dotBig.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (fabState === 'PROCESSING') return;
-  if (fabState === 'RECORDING') { stopRecording(); return; }
-  if (fabState !== 'EXPANDED') return;
+
+  bigDragMode = false;
+  bigDragStartX = e.clientX;
+  bigDragStartY = e.clientY;
+  bigFabStartLeft = parseInt(fab.style.left) || 0;
+  bigFabStartTop  = parseInt(fab.style.top)  || 0;
+
+  if (fabState === 'RECORDING') {
+    dotBig.setPointerCapture(e.pointerId);
+    const onRecMove = (me) => {
+      const dx = me.clientX - bigDragStartX, dy = me.clientY - bigDragStartY;
+      if (!bigDragMode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) bigDragMode = true;
+      if (bigDragMode) moveFab(bigFabStartLeft + dx, bigFabStartTop + dy);
+    };
+    const onRecUp = () => {
+      dotBig.removeEventListener('pointermove', onRecMove);
+      dotBig.removeEventListener('pointerup', onRecUp);
+      if (!bigDragMode) stopRecording();
+    };
+    dotBig.addEventListener('pointermove', onRecMove);
+    dotBig.addEventListener('pointerup', onRecUp);
+    return;
+  }
+
+  if (fabState !== 'EXPANDED' && fabState !== 'SELECTING') return;
 
   // Clean slate
   swipeActive = false;
@@ -581,8 +652,7 @@ dotBig.addEventListener('pointerdown', e => {
 
   // Hold 400ms → enter SELECTING mode
   swipeHoldTimer = setTimeout(() => {
-    swipeActive = true;
-    toSELECTING();
+    if (!bigDragMode) { swipeActive = true; toSELECTING(); }
   }, 400);
 
   window.addEventListener('pointermove', onBigMove, { passive: true });
@@ -590,10 +660,19 @@ dotBig.addEventListener('pointerdown', e => {
 }, { passive: false });
 
 function onBigMove(e) {
-  if (e.pointerId !== swipePointerId || !swipeActive) return;
+  if (e.pointerId !== swipePointerId) return;
+  const dx = e.clientX - bigDragStartX, dy = e.clientY - bigDragStartY;
+
+  // Drag detection before hold timer fires
+  if (!swipeActive && !bigDragMode && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+    bigDragMode = true;
+    clearTimeout(swipeHoldTimer);
+  }
+  if (bigDragMode) { moveFab(bigFabStartLeft + dx, bigFabStartTop + dy); return; }
+
+  if (!swipeActive) return;
   const chips = Array.from(modeTray.querySelectorAll('.chip'));
   let found = null;
-
   chips.forEach(chip => {
     const r = chip.getBoundingClientRect();
     const hit = e.clientX >= r.left - 30 && e.clientX <= r.right + 30
@@ -601,7 +680,6 @@ function onBigMove(e) {
     chip.classList.toggle('lit', hit);
     if (hit) found = { el: chip, modeId: chip.dataset.mode };
   });
-
   swipeLitChip = found;
 }
 
@@ -629,34 +707,21 @@ function onBigUp(e) {
     if (selected) currentModeId = selected;
     toEXPANDED();
 
-  } else {
+  } else if (!bigDragMode) {
     startRecording();
   }
+  bigDragMode = false;
 }
 
 // ─── Recording ───────────────────────────────────────────────────────────────
-async function startRecording() {
+function startRecording() {
   toRECORDING();
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-    mediaRecorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); runPipeline(); };
-    mediaRecorder.start();
-  } catch(err) {
-    showErr('⚠️ Mic access denied');
-    toEXPANDED();
-  }
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'startRecording' }));
 }
 
 function stopRecording() {
   toPROCESSING();
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  } else {
-    runPipeline();
-  }
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'stopRecording' }));
 }
 
 // ─── Pipeline ────────────────────────────────────────────────────────────────
@@ -664,25 +729,18 @@ async function runPipeline() {
   const live = apiKey.startsWith('gsk_') || apiKey.startsWith('sk-');
 
   if (!live) {
-    // Mock
-    await delay(900);
-    setStatus('AI processing...');
-    await delay(1000);
-    const mocks = {
-      default: "Hey Priya, just checking in about Saturday. Let me know if you're still free.",
-      email:   "Hi Priya,\n\nI just wanted to check in about our plans for Saturday. Are you still available?\n\nLooking forward to it.",
-      quick:   "Hey! Still free Saturday?",
-      ai:      "Hi [Colleague's name],\n\nThank you for your email. I wanted to let you know I've received it and will get back to you as soon as I can.\n\nAlso, just to update you — the reports are finished.\n\nBest,\n[Your name]",
-    };
-    showOutput(mocks[currentModeId]);
+    showErr('No API key -- tap the gear icon to add one');
+    toEXPANDED();
     return;
   }
 
   try {
     // Step 1: Whisper
-    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+    const blob = nativeAudioBlob || new Blob(audioChunks, { type: 'audio/webm' });
+    const filename = nativeAudioBlob ? 'audio.m4a' : 'audio.webm';
+    nativeAudioBlob = null;
     const form = new FormData();
-    form.append('file', blob, 'audio.webm');
+    form.append('file', blob, filename);
     form.append('model', apiKey.startsWith('sk-') ? 'whisper-1' : 'whisper-large-v3-turbo');
     const endpoint = apiKey.startsWith('sk-')
       ? 'https://api.openai.com/v1/audio/transcriptions'
@@ -871,39 +929,23 @@ let editMediaRecorder = null;
 let editAudioChunks   = [];
 
 function startEditRecording() {
-  const editBar  = document.getElementById('toastEditBar');
-  const actions  = document.getElementById('toastActions');
+  const editBar = document.getElementById('toastEditBar');
+  const actions = document.getElementById('toastActions');
   actions.style.display = 'none';
   editBar.classList.add('active');
-
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-      editAudioChunks = [];
-      editMediaRecorder = new MediaRecorder(stream);
-      editMediaRecorder.ondataavailable = e => { if (e.data.size > 0) editAudioChunks.push(e.data); };
-      editMediaRecorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); runEditPipeline(); };
-      editMediaRecorder.start();
-    })
-    .catch(() => {
-      showErr('Mic access denied');
-      resetToastToActions();
-    });
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'startEditRecording' }));
 }
 
 function stopEditRecording() {
-  if (editMediaRecorder && editMediaRecorder.state !== 'inactive') {
-    editMediaRecorder.stop();
-  }
-  const editBar  = document.getElementById('toastEditBar');
-  const procBar  = document.getElementById('toastEditProcessing');
+  const editBar = document.getElementById('toastEditBar');
+  const procBar = document.getElementById('toastEditProcessing');
   editBar.classList.remove('active');
   procBar.classList.add('active');
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'stopEditRecording' }));
 }
 
 function stopEditRecordingCleanup() {
-  if (editMediaRecorder && editMediaRecorder.state !== 'inactive') {
-    editMediaRecorder.stop();
-  }
+  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'cancelRecording' }));
   editMediaRecorder = null;
   editAudioChunks   = [];
   resetToastToActions();
@@ -920,16 +962,18 @@ async function runEditPipeline() {
   const live = apiKey.startsWith('gsk_') || apiKey.startsWith('sk-');
 
   if (!live) {
-    await delay(1200);
-    showEditOutput(pendingOutput + '\n\n[Mock edit applied]');
+    showErr('No API key -- tap the gear icon to add one');
+    resetToastToActions();
     return;
   }
 
   try {
     // Step 1: Transcribe the edit instruction
-    const blob = new Blob(editAudioChunks, { type: 'audio/webm' });
+    const blob = nativeEditAudioBlob || new Blob(editAudioChunks, { type: 'audio/webm' });
+    const filename = nativeEditAudioBlob ? 'audio.m4a' : 'audio.webm';
+    nativeEditAudioBlob = null;
     const form = new FormData();
-    form.append('file', blob, 'audio.webm');
+    form.append('file', blob, filename);
     form.append('model', apiKey.startsWith('sk-') ? 'whisper-1' : 'whisper-large-v3-turbo');
     const endpoint = apiKey.startsWith('sk-')
       ? 'https://api.openai.com/v1/audio/transcriptions'
