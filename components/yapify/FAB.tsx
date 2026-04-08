@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
-  View, Text, Animated, StyleSheet, useWindowDimensions, Keyboard,
+  View, Text, Animated, Image, StyleSheet, useWindowDimensions, Keyboard,
   ActivityIndicator,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -14,7 +14,7 @@ export type ModeId = 'default' | 'email' | 'quick' | 'ai';
 
 export const MODES: Record<ModeId, { emoji: string; name: string; prompt: string }> = {
   default: {
-    emoji: '🎙️',
+    emoji: '',
     name: 'Default',
     prompt: 'You are a transcription cleaner. Clean up this raw voice transcript into natural, flowing sentences. Fix grammar and punctuation. Join short fragmented sentences together where it sounds natural. Do NOT change the tone, word choices, or meaning. Do NOT add formatting, bullet points, or structure. Just return clean, readable prose that sounds exactly like the speaker.',
   },
@@ -300,11 +300,7 @@ export default function FAB({
               {isProcessing ? (
                 <ActivityIndicator size="small" color={colors.teal} />
               ) : currentMode === 'default' ? (
-                <View style={styles.logoIcon}>
-                  <View style={styles.logoOuter} />
-                  <View style={styles.logoMid} />
-                  <View style={styles.logoInner} />
-                </View>
+                <Image source={require('../../assets/yapify-logo.png')} style={styles.logoIcon} />
               ) : (
                 <Text style={styles.modeEmoji}>{MODES[currentMode].emoji}</Text>
               )}
@@ -341,9 +337,15 @@ function AnimatedChip({ mode, litModeShared, onRef }: {
       ref={onRef as any}
       style={[styles.chip, chipStyle]}
     >
-      <Text style={styles.chipText} numberOfLines={1}>
-        {MODES[mode].emoji} {MODES[mode].name}
-      </Text>
+      <View style={styles.chipRow}>
+        <View style={styles.chipIconWrap}>
+          {mode === 'default'
+            ? <Image source={require('../../assets/yapify-logo.png')} style={styles.chipLogo} />
+            : <Text style={styles.chipEmoji}>{MODES[mode].emoji}</Text>
+          }
+        </View>
+        <Text style={styles.chipText} numberOfLines={1}>{MODES[mode].name}</Text>
+      </View>
     </Reanimated.View>
   );
 }
@@ -404,6 +406,25 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 4,
   },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chipIconWrap: {
+    width: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipLogo: {
+    width: 22,
+    height: 22,
+  },
+  chipEmoji: {
+    fontSize: 17,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
   chipText: {
     fontFamily: fonts.sans,
     fontSize: 14,
@@ -421,31 +442,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
   logoIcon: {
-    width: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoOuter: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
-  logoMid: {
-    position: 'absolute',
-    width: 13,
-    height: 13,
-    borderRadius: 6.5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  logoInner: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#fff',
+    width: 34,
+    height: 34,
   },
 });

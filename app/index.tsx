@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, PermissionsAndroid, NativeModules,
+  View, StyleSheet, NativeModules,
   Keyboard, useWindowDimensions, SafeAreaView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
+import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 import { StatusBar } from 'expo-status-bar';
 
 import { colors } from '../constants/theme';
@@ -25,8 +24,8 @@ const OPENAI_BASE = 'https://api.openai.com/v1';
 export default function YapifyScreen() {
   const { height: sh } = useWindowDimensions();
   const inputRef = useRef<InputAreaRef>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const [fabState, setFabState] = useState<FabState>('IDLE');
   const [currentMode, setCurrentMode] = useState<ModeId>('default');
@@ -49,7 +48,7 @@ export default function YapifyScreen() {
 
   // Permissions + overlay
   useEffect(() => {
-    PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+    AudioModule.requestRecordingPermissionsAsync();
 
     let poll: ReturnType<typeof setInterval> | null = null;
     (async () => {
@@ -97,30 +96,19 @@ export default function YapifyScreen() {
 
   // Recording
   async function startNativeRecording() {
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-    const { recording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
-    );
-    recordingRef.current = recording;
+    await audioRecorder.prepareToRecordAsync();
+    audioRecorder.record();
   }
 
   async function stopNativeRecording(): Promise<string | null> {
-    const recording = recordingRef.current;
-    if (!recording) return null;
-    recordingRef.current = null;
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
+    await audioRecorder.stop();
+    const uri = audioRecorder.uri;
     if (!uri) return null;
-    const info = await FileSystem.getInfoAsync(uri);
-    if (!info.exists || (info as any).size < 4000) return null;
     return uri;
   }
 
   async function cancelNativeRecording() {
-    const recording = recordingRef.current;
-    if (!recording) return;
-    recordingRef.current = null;
-    await recording.stopAndUnloadAsync();
+    try { await audioRecorder.stop(); } catch { /* ignore */ }
   }
 
   // Timer
@@ -148,13 +136,13 @@ export default function YapifyScreen() {
     stopTimer();
     setFabState('PROCESSING');
     try {
-      const base64 = await stopNativeRecording();
-      if (!base64) {
+      const uri = await stopNativeRecording();
+      if (!uri) {
         showError('No audio detected');
         setFabState('EXPANDED');
         return;
       }
-      await runPipeline(base64);
+      await runPipeline(uri);
     } catch (e: any) {
       showError(e?.message || 'Recording failed');
       setFabState('EXPANDED');
@@ -247,13 +235,13 @@ export default function YapifyScreen() {
 
   async function handleStopEdit() {
     try {
-      const base64 = await stopNativeRecording();
-      if (!base64) {
+      const uri = await stopNativeRecording();
+      if (!uri) {
         showError('No audio detected');
         setToastEditing(false);
         return;
       }
-      await runEditPipeline(base64);
+      await runEditPipeline(uri);
     } catch {
       showError('Edit recording failed');
       setToastEditing(false);
