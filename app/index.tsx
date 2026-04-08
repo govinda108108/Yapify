@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  View, StyleSheet, NativeModules,
+  View, StyleSheet, NativeModules, AppState,
   Keyboard, useWindowDimensions, SafeAreaView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -61,14 +61,25 @@ export default function YapifyScreen() {
             if (granted) {
               clearInterval(poll!);
               poll = null;
-              OverlayModule.startOverlay();
+              // Permission just granted - overlay will appear when app is next backgrounded
             }
           }, 2000);
         } else {
-          OverlayModule.startOverlay();
+          // App is in foreground on launch - overlay starts hidden
+          // It will show when app is backgrounded via AppState listener
         }
       }
     })();
+
+    // Hide overlay dot while app is open, show it when backgrounded
+    const appState = AppState.addEventListener('change', (state) => {
+      if (!OverlayModule) return;
+      if (state === 'active') {
+        OverlayModule.stopOverlay();
+      } else if (state === 'background') {
+        OverlayModule.startOverlay();
+      }
+    });
 
     const kbShow = Keyboard.addListener('keyboardDidShow', (e) => {
       setKbHeight(e.endCoordinates.height);
@@ -77,6 +88,7 @@ export default function YapifyScreen() {
 
     return () => {
       if (poll) clearInterval(poll);
+      appState.remove();
       kbShow.remove();
       kbHide.remove();
     };
