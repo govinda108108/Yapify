@@ -126,7 +126,7 @@ export default function Toast({
         {!editing && (
           <View style={styles.actions}>
             <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onInject}>
-              <Text style={[styles.btnText, styles.btnTextPrimary]}>Inject ↓</Text>
+              <Text style={[styles.btnText, styles.btnTextPrimary]}>Insert ↓</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btn} onPress={onEdit}>
               <Text style={styles.btnText}>✏️ Edit</Text>

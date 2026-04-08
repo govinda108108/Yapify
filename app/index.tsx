@@ -248,8 +248,24 @@ export default function YapifyScreen() {
     }
   }
 
-  function handleInject() {
+  async function handleInject() {
     if (!toastOutput) return;
+    const { AccessibilityModule } = NativeModules;
+    if (AccessibilityModule) {
+      const enabled = await AccessibilityModule.isEnabled();
+      if (!enabled) {
+        // Prompt once to enable accessibility service
+        showError('Enable Yapify in Settings > Accessibility to insert anywhere');
+        AccessibilityModule.openSettings();
+        return;
+      }
+      const hasField = await AccessibilityModule.hasActiveField();
+      if (hasField) {
+        const ok = await AccessibilityModule.injectText(toastOutput);
+        if (ok) { setToastOutput(null); return; }
+      }
+    }
+    // Fallback: insert into Yapify's own textarea
     setToastOutput(null);
     inputRef.current?.injectText(toastOutput);
   }
