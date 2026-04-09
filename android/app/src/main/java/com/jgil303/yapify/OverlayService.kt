@@ -695,7 +695,7 @@ class OverlayService : Service() {
         try {
             val instruction = transcribe(file, key)
             val editPrompt = "You are an editor. The user will give you a piece of text and a spoken instruction for how to change it. Apply the instruction and return only the updated text -- no commentary, no explanation, no preamble."
-            val updated = chat(composeSystemPrompt(editPrompt), "Text:\n$currentOutput\n\nEdit instruction: $instruction", key)
+            val updated = chat(editPrompt, "Text:\n$currentOutput\n\nEdit instruction: $instruction", key)
             currentOutput = updated
             main.post { outputTextView?.text = updated; resetToResult() }
         } catch (e: Exception) {
