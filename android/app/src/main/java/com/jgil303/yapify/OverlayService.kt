@@ -57,6 +57,9 @@ class OverlayService : Service() {
     // Mode tray
     private var modeTrayWindow: LinearLayout? = null
     private val chipViews = mutableListOf<View>()
+    private var minimiseChipView: View? = null
+    private var pendingMinimise = false
+    private var minimised = false
 
     // Result card
     private var cardWindow: View? = null
@@ -140,8 +143,12 @@ class OverlayService : Service() {
 
     // ─── FAB container ────────────────────────────────────────────────────────
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_RESTORE) restore()
+        return START_STICKY
+    }
+
     private fun buildFabContainer() {
-        val sw = resources.displayMetrics.widthPixels
         fabContainer = FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
         fabParams = WindowManager.LayoutParams(
             FAB_CONTAINER_DP.dp, FAB_CONTAINER_DP.dp,
@@ -327,9 +334,13 @@ class OverlayService : Service() {
                     main.removeCallbacks(longPressRunnable)
                     when (state) {
                         State.SELECTING -> {
-                            currentMode = pendingMode
                             dismissModeTray()
-                            transitionTo(State.EXPANDED)
+                            if (pendingMinimise) {
+                                minimise()
+                            } else {
+                                currentMode = pendingMode
+                                transitionTo(State.EXPANDED)
+                            }
                         }
                         State.EXPANDED  -> if (!fabDragging) startRecording()
                         State.RECORDING -> if (!fabDragging) stopRecording()
@@ -380,8 +391,19 @@ class OverlayService : Service() {
             chipViews.add(chip)
         }
 
+        // Minimise chip at bottom
+        val minimiseChip = buildSpecialChip("⊙ Minimise")
+        tray.addView(minimiseChip, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        minimiseChipView = minimiseChip
+        pendingMinimise = false
+
         modeTrayWindow = tray
         val trayW = TRAY_WIDTH_DP.dp + 16.dp
+        val totalItems = modes.size + 1 // +1 for minimise
+        val trayY = (fabParams.y - totalItems * 52.dp - 8.dp).coerceAtLeast(8.dp)
 
         wm.addView(tray, WindowManager.LayoutParams(
             trayW, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -390,10 +412,9 @@ class OverlayService : Service() {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            // Gravity.END: x = distance from right edge, right-align tray with FAB
             gravity = Gravity.TOP or Gravity.END
             x = fabParams.x
-            y = fabParams.y - modes.size * 52.dp - 8.dp
+            y = trayY
         })
     }
 
@@ -437,19 +458,64 @@ class OverlayService : Service() {
         return chip
     }
 
+    private fun buildSpecialChip(label: String): LinearLayout {
+        val d = resources.displayMetrics.density
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val hp = 14.dp; val vp = 8.dp; setPadding(hp, vp, hp, vp)
+            elevation = 4 * d
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(C_SURFACE))
+                cornerRadius = 20 * d
+                setStroke(1.dp, Color.parseColor(C_BORDER))
+            }
+            addView(TextView(this@OverlayService).apply {
+                text = label; textSize = 14f; maxLines = 1
+                setTextColor(Color.parseColor(C_MUTED))
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
+        }
+    }
+
     private fun updateChipHighlight(rawX: Float, rawY: Float) {
+        val d = resources.displayMetrics.density
+        var hitMode: ModeData? = null
+        var hitMinimise = false
+
+        // Check mode chips
         chipViews.forEachIndexed { i, chip ->
             val loc = IntArray(2); chip.getLocationOnScreen(loc)
             val hit = rawX >= loc[0] - 30.dp && rawX <= loc[0] + chip.width + 30.dp &&
                       rawY >= loc[1] - 16.dp && rawY <= loc[1] + chip.height + 16.dp
-            if (hit) pendingMode = modes[i]
+            if (hit) hitMode = modes[i]
         }
+        // Check minimise chip
+        minimiseChipView?.let { chip ->
+            val loc = IntArray(2); chip.getLocationOnScreen(loc)
+            val hit = rawX >= loc[0] - 30.dp && rawX <= loc[0] + chip.width + 30.dp &&
+                      rawY >= loc[1] - 16.dp && rawY <= loc[1] + chip.height + 16.dp
+            if (hit) hitMinimise = true
+        }
+
+        if (hitMinimise) { pendingMinimise = true }
+        else if (hitMode != null) { pendingMinimise = false; pendingMode = hitMode!! }
+
         chipViews.forEachIndexed { i, chip ->
-            val lit = modes[i] == pendingMode
-            val d = resources.displayMetrics.density
+            val lit = !pendingMinimise && modes[i] == pendingMode
             (chip.background as? GradientDrawable)?.apply {
                 setColor(Color.parseColor(if (lit) "#262ec4b6" else C_SURFACE))
                 setStroke(1.dp, Color.parseColor(if (lit) C_TEAL else C_BORDER))
+            }
+            chip.animate().scaleX(if (lit) 1.04f else 1f).scaleY(if (lit) 1.04f else 1f)
+                .setDuration(100).start()
+        }
+        minimiseChipView?.let { chip ->
+            val lit = pendingMinimise
+            (chip.background as? GradientDrawable)?.apply {
+                setColor(Color.parseColor(if (lit) "#22262a" else C_SURFACE))
+                setStroke(1.dp, Color.parseColor(if (lit) C_MUTED else C_BORDER))
             }
             chip.animate().scaleX(if (lit) 1.04f else 1f).scaleY(if (lit) 1.04f else 1f)
                 .setDuration(100).start()
@@ -459,6 +525,40 @@ class OverlayService : Service() {
     private fun dismissModeTray() {
         modeTrayWindow?.let { runCatching { wm.removeView(it) } }
         modeTrayWindow = null; chipViews.clear()
+        minimiseChipView = null; pendingMinimise = false
+    }
+
+    private fun minimise() {
+        minimised = true
+        state = State.IDLE
+        runCatching { wm.removeView(fabContainer) }
+        // Update notification with restore action
+        val restoreIntent = Intent(this, OverlayService::class.java).apply { action = ACTION_RESTORE }
+        val pi = PendingIntent.getService(this, 0, restoreIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val ch = "yapify_overlay"
+        getSystemService(NotificationManager::class.java).notify(1,
+            Notification.Builder(this, ch)
+                .setContentTitle("Yapify (hidden)")
+                .setContentText("Tap to restore dot")
+                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentIntent(pi)
+                .build())
+    }
+
+    private fun restore() {
+        if (!minimised) return
+        minimised = false
+        runCatching { wm.addView(fabContainer, fabParams) }
+        buildSmallDot()
+        // Restore notification
+        val ch = "yapify_overlay"
+        getSystemService(NotificationManager::class.java).notify(1,
+            Notification.Builder(this, ch)
+                .setContentTitle("Yapify")
+                .setContentText("Tap dot to expand  •  Hold to change mode")
+                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .build())
     }
 
     // ─── Recording ────────────────────────────────────────────────────────────
@@ -954,6 +1054,7 @@ class OverlayService : Service() {
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
 
     companion object {
+        const val ACTION_RESTORE = "com.jgil303.yapify.RESTORE_OVERLAY"
         private const val TAG = "YapifyOverlay"
         private const val GROQ_BASE   = "https://api.groq.com/openai/v1"
         private const val OPENAI_BASE = "https://api.openai.com/v1"
