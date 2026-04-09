@@ -42,4 +42,9 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
     fun stopOverlay() {
         reactContext.stopService(Intent(reactContext, OverlayService::class.java))
     }
+
+    @ReactMethod
+    fun saveApiKey(key: String) {
+        ApiKeyStore.setKey(reactContext, key)
+    }
 }

@@ -41,9 +41,14 @@ export default function YapifyScreen() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load persisted API key
+  // Load persisted API key and sync to native (so OverlayService can access it)
   useEffect(() => {
-    AsyncStorage.getItem('apiKey').then((k) => { if (k) setApiKey(k); });
+    AsyncStorage.getItem('apiKey').then((k) => {
+      if (k) {
+        setApiKey(k);
+        if (OverlayModule) OverlayModule.saveApiKey(k);
+      }
+    });
   }, []);
 
   // Permissions + overlay
@@ -107,6 +112,7 @@ export default function YapifyScreen() {
   const handleApiKeyChange = useCallback((k: string) => {
     setApiKey(k);
     AsyncStorage.setItem('apiKey', k);
+    if (OverlayModule) OverlayModule.saveApiKey(k);
   }, []);
 
   function showError(msg: string) {

@@ -1,208 +1,166 @@
-# Yapify — Project Brief for Claude Code
+# Yapify — Claude Code Project Brief
 
 ## What is Yapify?
-Yapify is a voice-to-text app with AI processing. It lets users record their voice, transcribes it via Whisper, then processes it through an LLM to clean, reformat, or transform the text based on a selected mode. The output appears in a toast, which can then be injected into a text field, dismissed, or voice-edited.
+Yapify is a voice-to-text app with AI processing. The user records their voice, it transcribes via Whisper, then an LLM cleans/reformats the text based on a selected mode. The result appears in a floating overlay card that can be injected into any text field system-wide.
 
-## Current State
-A fully working HTML prototype exists at `assets/yapify-full.html`. This is the source of truth for UI design, interaction patterns, and pipeline logic. All new React Native code should match this reference as closely as possible.
+## Current State (April 2026)
+- Full React Native app is working (Phase 3 complete)
+- Floating overlay dot works system-wide over other apps
+- **Active work:** Making the dot fully self-contained -- tap dot to record, transcribe, LLM process, show result card, inject at cursor -- all WITHOUT opening the Yapify app
+- EAS builds are currently failing with a Gradle error (under investigation)
 
 ## Tech Stack
-- **Framework:** React Native with Expo (EAS Build for native features)
-- **Build:** EAS Build (cloud compilation — dev builds, not Expo Go)
-- **AI Pipeline:** Groq API — Whisper large-v3-turbo for transcription, LLaMA 3.3 70b for text processing
-- **Target:** Android only (for now)
-- **Key native feature:** System overlay (floating dot over other apps)
+- **Framework:** React Native with Expo SDK 54, expo-router
+- **Build:** EAS Build cloud compilation -- dev builds only, not Expo Go
+- **AI:** Groq API (gsk_ keys) or OpenAI (sk- keys)
+  - Transcription: Groq `whisper-large-v3-turbo` / OpenAI `whisper-1`
+  - LLM: Groq `llama-3.3-70b-versatile` / OpenAI `gpt-4o-mini`
+- **Target:** Android only
+- **Dev environment:** Termux on the Android device itself
 
 ## Design System
-All colours and fonts from the HTML prototype:
 ```
---bg: #0e1012
---surface: #1a1d1f
+--bg:       #0e1012
+--surface:  #1a1d1f
 --surface2: #22262a
---border: #2c3035
---text: #eceef0
---muted: #8a9199
---teal: #2ec4b6
---teal2: #1a9e94
---red: #ff5a5a
-Font: DM Sans (body), DM Mono (labels/mono)
+--border:   #2c3035
+--text:     #eceef0
+--muted:    #8a9199
+--teal:     #2ec4b6
+--teal2:    #1a9e94
+--red:      #ff5a5a
+Fonts: DM Sans (body), DM Mono (labels/mono)
 ```
 
-## Core UI Elements
-1. **Header** — Yapify logo (teal concentric circles SVG) + "Yapify" wordmark
-2. **Textarea** — Dark surface, placeholder "Tap to type, or use the dot to dictate..."
-3. **Floating dot FAB** — Small teal dot, draggable, lives in top half of screen
-   - Tap → expands to big button
-   - Tap big button → records audio
-   - Hold big button → mode tray appears (drag to select mode)
-   - Tap again while recording → stops, processes
-4. **Mode tray** — 4 modes selectable by hold+drag on the FAB:
-   - 🎙️ Default — clean transcript
-   - ✉️ Email — format as email
-   - 💬 Quick Message — short casual text
-   - 🤖 AI Prompt — execute instruction directly
-5. **Toast output** — appears after processing with:
-   - Drag handle (long press to reposition — important for keyboard avoidance)
-   - Output text
-   - Three buttons: Inject ↓ | ✏️ Edit | Dismiss
-6. **Voice Edit** — tapping Edit in the toast starts a new recording; the spoken instruction + current output text are sent back to the LLM to produce an updated version
-7. **Settings panel** — slides in from right, contains API key input (Groq gsk_ or OpenAI sk-)
+## Architecture
 
-## AI Pipeline
-```
-Record audio → Blob → Groq Whisper transcription → transcript text
-→ Groq LLaMA 3.3 70b with mode-specific system prompt → output text
-→ Show in toast
-```
-Mock mode: if no valid API key, returns hardcoded demo text (for UI testing).
+### React Native App (app/index.tsx)
+Full native UI -- not a WebView. Key flows:
+- FAB dot (teal, draggable) expands on tap, records audio via `expo-audio`
+- 4 modes selectable by hold+drag: Default, Email, Quick Message, AI Prompt
+- After recording: Whisper transcription → LLM → output toast
+- Toast has: Inject | Edit (voice) | Dismiss
+- Settings panel: API key input (persisted to AsyncStorage + native SharedPreferences)
+- Overlay dot shown over other apps when app is backgrounded; hidden when app is active
 
-Edit pipeline:
+### Overlay System (Native Android Kotlin)
+The floating dot works as a standalone foreground service independent of the app:
+
+**Flow when app is in background:**
+1. User taps green dot → `OverlayService` starts recording via `MediaRecorder`
+2. Dot turns red (recording), gray (processing)
+3. Service calls Whisper + LLM directly via `HttpURLConnection`
+4. Result shown in floating card with "Inject" + "Dismiss" buttons
+5. Inject calls `YapifyAccessibilityService.injectText()` to paste at last focused cursor
+
+**API key sharing:** API key is stored in SharedPreferences (`yapify_prefs` / `api_key`) via `ApiKeyStore`. The JS side calls `OverlayModule.saveApiKey(key)` on load and on change, so the native service can read it without the app being open.
+
+### Accessibility Service
+`YapifyAccessibilityService` tracks the last focused editable text field across all apps. `injectText()` uses clipboard paste to inject at cursor. User must enable in Settings > Accessibility > Yapify.
+
+## Native Files
 ```
-Record edit instruction → transcribe → send {current output + edit instruction} to LLaMA → update toast
+android/app/src/main/java/com/jgil303/yapify/
+├── MainActivity.kt
+├── MainApplication.kt            -- registers OverlayPackage + AccessibilityPackage
+├── ApiKeyStore.kt                -- SharedPreferences helper for API key
+├── OverlayService.kt             -- Foreground service: dot, recording, API calls, result card
+├── OverlayModule.kt              -- RN bridge: startOverlay, stopOverlay, saveApiKey, hasPermission
+├── OverlayPackage.kt             -- registers OverlayModule
+├── YapifyAccessibilityService.kt -- tracks focused fields, provides injectText()
+├── AccessibilityModule.kt        -- RN bridge: isEnabled, hasActiveField, injectText, openSettings
+└── AccessibilityPackage.kt       -- registers AccessibilityModule
+```
+
+## Key JS Files
+```
+app/
+├── _layout.tsx      -- bare Stack, headerShown: false
+└── index.tsx        -- main screen: FAB, recording, pipeline, toast, settings
+components/yapify/
+├── FAB.tsx          -- draggable floating button + mode tray
+├── Toast.tsx        -- output card with inject/edit/dismiss
+├── ToastEditBar.tsx -- voice edit controls within toast
+├── Header.tsx       -- logo + settings button
+├── InputArea.tsx    -- textarea (ref: injectText method)
+├── Settings.tsx     -- API key settings panel
+├── StatusPill.tsx   -- status text below FAB
+├── ErrorToast.tsx   -- brief error banner
+constants/
+└── theme.ts         -- colors, fonts
 ```
 
 ## Mode Prompts
-- **Default:** Clean up raw transcript into natural prose. Fix grammar/punctuation. Preserve tone and meaning exactly. No formatting.
-- **Email:** Format as proper email with greeting and sign-off. Minor tonal adjustments only.
-- **Quick Message:** Rewrite as short casual text message. Keep brief and conversational.
-- **AI Prompt:** Execute the instruction directly. Write in user's tone. Return only the output.
+- **Default:** Clean up raw transcript into natural prose. Fix grammar/punctuation. Preserve tone exactly. No formatting.
+- **Email:** Format as proper email with greeting/sign-off. Minor tonal adjustments only. No added info.
+- **Quick Message:** Rewrite as short casual text message. Brief and conversational.
+- **AI Prompt:** Execute the instruction directly. Return only the output in user's tone.
 
-## Native Android Features Needed
-### 1. System Overlay Service
-- Permission: `SYSTEM_ALERT_WINDOW`
-- The floating teal dot should appear over ALL other apps
-- Tapping it opens Yapify or starts recording depending on state
-- Implementation: Native Kotlin `Service` with `WindowManager` overlay
-- Bridge to React Native via **Method Channel**
+## Overlay Dot State Colors
+- Teal `#2ec4b6` -- idle (tap to record)
+- Red `#ff5a5a` -- recording (tap to stop)
+- Gray `#8a9199` -- processing (wait)
 
-### 2. Accessibility Service (future)
-- Allow Yapify dot to appear in accessibility shortcut menu
-- Long-term goal: inject text directly into any focused text field system-wide
-
-## App Permissions Required (app.json / AndroidManifest)
+## Permissions (AndroidManifest.xml)
 ```xml
-<uses-permission android:name="android.permission.RECORD_AUDIO" />
-<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.INTERNET" />
+FOREGROUND_SERVICE
+FOREGROUND_SERVICE_MICROPHONE
+INTERNET
+READ_EXTERNAL_STORAGE
+RECORD_AUDIO
+SYSTEM_ALERT_WINDOW
+VIBRATE
+WRITE_EXTERNAL_STORAGE
 ```
+Service: `OverlayService` with `foregroundServiceType="microphone"`
 
-## Build Setup
-- EAS Build configured for Android
-- Dev build (not Expo Go) required for native modules
-- Run builds with: `eas build --platform android --profile development`
-- Install APK directly on device after build completes
+## Build Commands
+```bash
+# Always use this -- fingerprint step fails in Termux
+EAS_SKIP_AUTO_FINGERPRINT=1 eas build --platform android --profile development
 
-## Key Packages
+# Dev server (needed to run dev builds -- app connects to this for JS bundle)
+npx expo start --lan
+
+# Check a specific build
+eas build:view <build-id>
 ```
-react-native-webview      — for WebView wrapper phase
-expo-av                   — audio recording
-expo-file-system          — file handling
-```
-
-## Development Approach
-**Phase 1 — WebView wrapper (DONE)**
-`app/index.tsx` wraps `assets/yapify-v0.1.html` in a full-screen WebView. APK built via EAS (build ID: 3a1d1720). Permissions, package name, and EAS APK build type all configured.
-
-**Phase 2 — Native overlay (IN PROGRESS)**
-Kotlin overlay service written. Floating teal dot appears system-wide via `WindowManager`. Tapping it opens Yapify. Draggable. Method Channel bridge (`OverlayModule`) lets React Native start/stop the service and check/request `SYSTEM_ALERT_WINDOW` permission.
-
-Key files:
-- `android/app/src/main/java/com/jgil303/yapify/OverlayService.kt`
-- `android/app/src/main/java/com/jgil303/yapify/OverlayModule.kt`
-- `android/app/src/main/java/com/jgil303/yapify/OverlayPackage.kt`
-
-Next: add JS-side hook in `app/index.tsx` to call `OverlayModule.startOverlay()` on app launch (after permission check). Then build and test.
-
-**Phase 3 — Full native UI**
-Rebuild the Yapify UI natively in React Native (matching the HTML prototype exactly). Replace WebView with native components.
-
-**Phase 4 — Accessibility service**
-Register as Android accessibility service. Enable text injection into any app's text field.
-
-## Developer Context
-- Built and iterated on Termux (Android phone) + Claude Code
-- EAS Build handles cloud compilation — no local Android SDK needed
-- GitHub repo connected to EAS
-- API key stored in app settings (not hardcoded), persisted in AsyncStorage
-- Developer has Android background, is learning automation/RN
-- Voice input to Claude Code: use SwiftKey mic to dictate prompts as text
-
-## File Structure
-```
-yapify/
-├── CLAUDE.md                     ← this file
-├── app.json                      ← Expo config + permissions
-├── eas.json                      ← EAS build profiles (APK for dev/preview)
-├── assets/
-│   ├── yapify-v0.1.html          ← Active WebView source (loaded by app/index.tsx)
-│   └── yapify-full.html          ← HTML prototype (source of truth for UI design)
-├── app/
-│   ├── _layout.tsx               ← Bare Stack, headerShown: false
-│   └── index.tsx                 ← Full-screen WebView screen
-├── components/                   ← Reusable RN components (boilerplate, unused in Phase 1)
-└── android/                      ← Native Android code (generated via expo prebuild)
-    └── app/src/main/
-        ├── AndroidManifest.xml   ← Permissions + OverlayService declaration
-        └── java/com/jgil303/yapify/
-            ├── MainActivity.kt
-            ├── MainApplication.kt ← Registers OverlayPackage
-            ├── OverlayService.kt  ← Floating dot via WindowManager
-            ├── OverlayModule.kt   ← RN Method Channel bridge
-            └── OverlayPackage.kt  ← Registers OverlayModule
-```
-
-## Roadmap
-
-**Phase 1 - WebView wrapper (DONE)**
-Wrap HTML prototype in native APK via EAS. Mic and API calls work through WebView. Installable on Android.
-- Native mic recording via expo-av (bypasses WebView sandbox block)
-- FAB draggable in all states: expanded, recording, mode tray
-- Keyboard-aware FAB: jumps to top half when keyboard opens, free movement otherwise
-- No-audio-detected error on empty recordings
-- No-API-key error shown instead of mock output
-
-**Phase 2 - Android overlay (IN PROGRESS)**
-Kotlin service draws floating dot over all other apps system-wide. Method channel bridges Kotlin to React Native JS.
-- Kotlin OverlayService, OverlayModule, OverlayPackage all written
-- Next: wire up JS-side hook in app/index.tsx to call OverlayModule.startOverlay() on launch after permission check
-
-**Phase 3 - Native UI**
-Rebuild Yapify screen natively in React Native. Replace WebView. Match HTML design exactly.
-
-**Phase 4 - Accessibility service**
-Register as Android accessibility service. Inject processed text directly into any app's focused text field.
-
-**Phase 5 - Polish and settings**
-API key persistence via AsyncStorage. Onboarding flow. Error handling. Settings screen improvements.
-
-**Phase 6 - Custom modes**
-User-defined modes with custom prompts. Save and name your own modes. Reply-to-text mode.
-
-**Phase 7 - Monetisation**
-Bring-your-own-key model free tier. Hosted subscription at ~$5/month covering API costs.
-
-**Phase 8 - Play store**
-Production EAS build. Store listing. Privacy policy. Public launch.
-
-**Phase 9 - iOS**
-Full Yapify experience on iPhone minus system overlay. PWA fallback for overlay functionality.
-
-**Phase 10 - Long term**
-Desktop app via Electron or Tauri. Team and workspace features. Deep integrations with WhatsApp, Gmail, Slack.
 
 ## Build Notes
-- EAS fingerprint step fails in Termux -- always build with:
-  `EAS_SKIP_AUTO_FINGERPRINT=1 eas build --platform android --profile development`
-- android/ is generated via `npx expo prebuild --platform android --clean` -- do not manually edit files that prebuild overwrites (check build logs if manifest changes disappear)
+- EAS fingerprint step always fails in Termux -- always pass `EAS_SKIP_AUTO_FINGERPRINT=1`
+- Dev builds require Metro (`npx expo start --lan`) to be running to load the JS bundle
+- Tunnel mode (`--tunnel`) fails with ngrok ERR_INVALID_ARG_TYPE -- use `--lan` instead
+- `android/` is generated via `npx expo prebuild` -- check if manifest changes persist after prebuild
+- `MediaRecorder(Context)` constructor requires API 31 -- use compat pattern:
+  ```kotlin
+  @Suppress("DEPRECATION")
+  val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(ctx) else MediaRecorder()
+  ```
+- EAS builds fail silently -- check the "Run gradlew" section on expo.dev for the actual Kotlin error
 
-## Important Notes
-- **No em dashes** in any copy or comments
-- Keep code comments concise and clear
-- Match the HTML prototype's interaction model exactly before adding new features
-- The FAB dot can be dragged anywhere on screen; it auto-jumps to the top half when the keyboard opens
-- Toast must use visualViewport to position above keyboard
-- API key is never hardcoded -- always from user settings
+## Debugging
+```bash
+# Stream overlay service logs
+adb connect <ip>:<port>   # wireless ADB via Developer Options > Wireless Debugging
+adb logcat -s YapifyOverlay:V ReactNativeJS:V ReactNative:V *:E
 
-## Screenshot access
-A watcher script runs automatically on startup that copies the latest Android screenshot to ~/yapify/latest-screenshot.png every 2 seconds. When the user sends just the letter "s" alone, or says "check screenshot", "look at screenshot", or similar, read ~/yapify/latest-screenshot.png for visual context.
+# Check build status
+eas build:view <build-id>
+```
+Errors from `OverlayService` surface as Android Toasts (user-visible) and `Log.e(TAG, ...)` (logcat).
+
+## Important Rules
+- No em dashes in any code, comments, or copy
+- API key is NEVER hardcoded -- always from user settings/SharedPreferences
+- Keep code comments concise
+- Match the HTML prototype design exactly before adding features
+- `s` alone in chat = check `~/yapify/latest-screenshot.png` for visual status
+
+## Screenshot Access
+A watcher script copies the latest Android screenshot to `~/yapify/latest-screenshot.png` every 2 seconds. When the user sends just "s", read that file for visual context.
+
+## Roadmap
+- **Done:** Full native RN UI, FAB, recording pipeline, toast, mode tray, overlay dot service, accessibility injection
+- **In progress:** Standalone overlay recording (dot works without app open) -- EAS build failing
+- **Next:** Fix Gradle build error, test full overlay-only flow
+- **Planned:** Custom user-defined modes, onboarding, Play Store release, iOS
