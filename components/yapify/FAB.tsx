@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
   View, Text, Animated, Image, StyleSheet, useWindowDimensions, Keyboard,
-  ActivityIndicator,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -76,6 +75,7 @@ export default function FAB({
   const ripple2 = useRef(new Animated.Value(0)).current;
   const ripple3 = useRef(new Animated.Value(0)).current;
   const rippleLoop = useRef<Animated.CompositeAnimation | null>(null);
+  const processingSpin = useRef(new Animated.Value(0)).current;
 
   // Chip screen positions for hit testing (measured via measureInWindow)
   const chipRects = useRef<Record<ModeId, { x: number; y: number; w: number; h: number } | null>>(
@@ -130,6 +130,23 @@ export default function FAB({
       startRipple();
     }
   }, [fabState]);
+
+  useEffect(() => {
+    if (fabState === 'PROCESSING') {
+      processingSpin.setValue(0);
+      const loop = Animated.loop(
+        Animated.timing(processingSpin, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        })
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    processingSpin.stopAnimation();
+    processingSpin.setValue(0);
+  }, [fabState, processingSpin]);
 
   function measureChips() {
     CHIP_MODES.forEach((mode) => {
@@ -259,6 +276,14 @@ export default function FAB({
 
   const isRecording = fabState === 'RECORDING';
   const isProcessing = fabState === 'PROCESSING';
+  const processingSpinStyle = {
+    transform: [{
+      rotate: processingSpin.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+      }),
+    }],
+  };
 
   const timerStr = `${Math.floor(recordingSecs / 60)}:${String(recordingSecs % 60).padStart(2, '0')}`;
 
@@ -305,7 +330,9 @@ export default function FAB({
                 }]} />
               ))}
               {isProcessing ? (
-                <ActivityIndicator size="small" color={colors.teal} />
+                <Animated.View style={processingSpinStyle}>
+                  <Image source={require('../../assets/mic-stars.png')} style={styles.logoIcon} />
+                </Animated.View>
               ) : currentMode === 'default' ? (
                 <Image source={require('../../assets/mic-stars.png')} style={styles.logoIcon} />
               ) : (

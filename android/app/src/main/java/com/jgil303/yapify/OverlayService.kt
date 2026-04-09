@@ -266,15 +266,12 @@ class OverlayService : Service() {
         // Content inside dot
         when (forState) {
             State.PROCESSING -> {
-                val spinner = View(this).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(Color.TRANSPARENT)
-                        setStroke((2.5f * d).toInt(), Color.parseColor(C_TEAL))
-                    }
+                val spinner = ImageView(this).apply {
+                    setImageResource(R.drawable.mic_stars)
+                    scaleType = ImageView.ScaleType.CENTER_INSIDE
                 }
                 fabSpinner = spinner
-                dot.addView(spinner, FrameLayout.LayoutParams(24.dp, 24.dp, Gravity.CENTER))
+                dot.addView(spinner, FrameLayout.LayoutParams(34.dp, 34.dp, Gravity.CENTER))
                 fabSpinnerAnim = ObjectAnimator.ofFloat(spinner, View.ROTATION, 0f, 360f).apply {
                     duration = 700; repeatCount = ObjectAnimator.INFINITE
                     interpolator = LinearInterpolator(); start()
@@ -283,7 +280,7 @@ class OverlayService : Service() {
             else -> {
                 if (currentMode.id == "default") {
                     val iv = ImageView(this).apply {
-                        setImageResource(R.mipmap.ic_launcher_foreground)
+                        setImageResource(R.drawable.mic_stars)
                         scaleType = ImageView.ScaleType.CENTER_INSIDE
                     }
                     dot.addView(iv, FrameLayout.LayoutParams(34.dp, 34.dp, Gravity.CENTER))
@@ -437,7 +434,7 @@ class OverlayService : Service() {
         // Icon area
         if (mode.id == "default") {
             val iv = ImageView(this).apply {
-                setImageResource(R.mipmap.ic_launcher_foreground)
+                setImageResource(R.drawable.mic_stars)
                 scaleType = ImageView.ScaleType.CENTER_INSIDE
             }
             chip.addView(iv, LinearLayout.LayoutParams(22.dp, 22.dp))
@@ -677,7 +674,11 @@ class OverlayService : Service() {
             val output = chat(composeSystemPrompt(getModePrompt(currentMode)), transcript, key)
             Log.d(TAG, "Output length: ${output.length}")
             currentOutput = output
-            main.post { transitionTo(State.IDLE); showResultCard(output) }
+            main.post {
+                state = State.IDLE
+                fabContainer.visibility = View.INVISIBLE
+                showResultCard(output)
+            }
         } catch (e: Exception) {
             showErr(e.message ?: "Pipeline failed")
             main.post { transitionTo(State.EXPANDED) }
@@ -860,7 +861,10 @@ class OverlayService : Service() {
 
         val btnInsert = cardBtn("Insert ↓", primary = true) {
             val ok = YapifyAccessibilityService.injectText(currentOutput)
-            if (ok) dismissResultCard()
+            if (ok) {
+                dismissResultCard()
+                restoreSmallDotAfterResult()
+            }
             else showErr("Enable Yapify in Accessibility Settings to inject text")
         }
         val btnEdit = cardBtn("✏ Edit", primary = false) {
@@ -874,7 +878,8 @@ class OverlayService : Service() {
             if (state == State.EDIT_RECORDING) {
                 runCatching { recorder?.stop() }; recorder?.release(); recorder = null
             }
-            dismissResultCard(); state = State.IDLE
+            dismissResultCard()
+            restoreSmallDotAfterResult()
         }
 
         val btnCopy = cardBtn("Copy", primary = false) {
@@ -959,6 +964,11 @@ class OverlayService : Service() {
         cardWindow = null; outputTextView = null
         editBarContainer = null; actionButtonsRow = null
         currentOutput = ""
+    }
+
+    private fun restoreSmallDotAfterResult() {
+        fabContainer.visibility = View.VISIBLE
+        transitionTo(State.IDLE)
     }
 
     // ─── Edit bar (ToastEditBar) ──────────────────────────────────────────────
