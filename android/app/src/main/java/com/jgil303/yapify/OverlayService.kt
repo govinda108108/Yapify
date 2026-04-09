@@ -209,22 +209,24 @@ class OverlayService : Service() {
 
     private fun buildBigDot(forState: State) {
         clearFabViews()
-        resizeFabContainer(FAB_CONTAINER_DP, FAB_CONTAINER_DP + 36) // +36 for timer
+        resizeFabContainer(FAB_CONTAINER_DP, FAB_CONTAINER_DP)
 
         val d = resources.displayMetrics.density
         val fabSizePx = FAB_SIZE_DP.dp
 
-        // Timer (above FAB)
         val timer = TextView(this).apply {
             text = "0:00"; textSize = 13f
             setTextColor(Color.parseColor(C_RED))
             gravity = Gravity.CENTER
             visibility = if (forState == State.RECORDING) View.VISIBLE else View.GONE
+            translationY = -38.dp.toFloat()
         }
         timerView = timer
         fabContainer.addView(timer, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT, 36.dp
-        ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL })
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
 
         // Ripple rings (shown during RECORDING)
         repeat(3) {
@@ -238,7 +240,6 @@ class OverlayService : Service() {
             }
             fabContainer.addView(ring, FrameLayout.LayoutParams(fabSizePx, fabSizePx).apply {
                 gravity = Gravity.CENTER
-                topMargin = 36.dp
             })
             rippleViews.add(ring)
         }
@@ -260,7 +261,6 @@ class OverlayService : Service() {
         bigDotView = dot
         fabContainer.addView(dot, FrameLayout.LayoutParams(fabSizePx, fabSizePx).apply {
             gravity = Gravity.CENTER
-            topMargin = 36.dp
         })
 
         // Content inside dot
@@ -537,20 +537,14 @@ class OverlayService : Service() {
     }
 
     private fun minimise() {
-        minimised = true
-        state = State.IDLE
-        runCatching { wm.removeView(fabContainer) }
-        // Update notification with restore action
-        val restoreIntent = Intent(this, OverlayService::class.java).apply { action = ACTION_RESTORE }
-        val pi = PendingIntent.getService(this, 0, restoreIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        minimised = false
+        transitionTo(State.IDLE)
         val ch = "yapify_overlay"
         getSystemService(NotificationManager::class.java).notify(1,
             Notification.Builder(this, ch)
-                .setContentTitle("Yapify (hidden)")
-                .setContentText("Tap to restore dot")
+                .setContentTitle("Yapify")
+                .setContentText("Tap dot to expand  •  Hold to change mode")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentIntent(pi)
                 .build())
     }
 

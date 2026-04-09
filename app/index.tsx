@@ -209,14 +209,6 @@ export default function YapifyScreen() {
     });
   }, []);
 
-  const handleResetGlobalPrompt = useCallback(() => {
-    handleGlobalPromptChange('');
-  }, [handleGlobalPromptChange]);
-
-  const handleApplyDefaultGlobalPrompt = useCallback(() => {
-    handleGlobalPromptChange('Keep my tone direct and natural. Do not invent facts. Keep the output tight unless I explicitly ask for more detail.');
-  }, [handleGlobalPromptChange]);
-
   const handleResetModePrompt = useCallback((modeId: ModeId) => {
     handleModePromptChange(modeId, DEFAULT_MODE_PROMPTS[modeId]);
   }, [handleModePromptChange]);
@@ -547,8 +539,6 @@ export default function YapifyScreen() {
         onApiKeyChange={handleApiKeyChange}
         onGlobalPromptChange={handleGlobalPromptChange}
         onModePromptChange={handleModePromptChange}
-        onResetGlobalPrompt={handleResetGlobalPrompt}
-        onApplyDefaultGlobalPrompt={handleApplyDefaultGlobalPrompt}
         onResetModePrompt={handleResetModePrompt}
         onRestoreHistoryItem={(item) => {
           setToastOutput(item.output);

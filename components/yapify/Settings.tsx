@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  Animated, Easing, StyleSheet, useWindowDimensions, ScrollView,
+  Animated, Easing, StyleSheet, useWindowDimensions, ScrollView, Alert,
 } from 'react-native';
 import { colors, fonts } from '../../constants/theme';
 import { MODES, ModeId } from './FAB';
@@ -25,8 +25,6 @@ type Props = {
   onApiKeyChange: (k: string) => void;
   onGlobalPromptChange: (prompt: string) => void;
   onModePromptChange: (modeId: ModeId, prompt: string) => void;
-  onResetGlobalPrompt: () => void;
-  onApplyDefaultGlobalPrompt: () => void;
   onResetModePrompt: (modeId: ModeId) => void;
   onRestoreHistoryItem: (item: HistoryItem) => void;
   onClearHistory: () => void;
@@ -64,8 +62,6 @@ export default function Settings({
   onApiKeyChange,
   onGlobalPromptChange,
   onModePromptChange,
-  onResetGlobalPrompt,
-  onApplyDefaultGlobalPrompt,
   onResetModePrompt,
   onRestoreHistoryItem,
   onClearHistory,
@@ -87,6 +83,28 @@ export default function Settings({
   }, [translateX, visible, width]);
 
   const isLive = apiKey.startsWith('gsk_') || apiKey.startsWith('sk-');
+
+  function confirmResetModePrompt(modeId: ModeId) {
+    Alert.alert(
+      'Reset Prompt?',
+      `Reset the ${MODES[modeId].name} prompt back to its default text?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reset', style: 'destructive', onPress: () => onResetModePrompt(modeId) },
+      ],
+    );
+  }
+
+  function confirmClearHistory() {
+    Alert.alert(
+      'Clear History?',
+      'Remove all saved outputs from Settings history?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: onClearHistory },
+      ],
+    );
+  }
 
   return (
     <Animated.View style={[styles.panel, { transform: [{ translateX }] }]}>
@@ -141,10 +159,7 @@ export default function Settings({
         </View>
 
         <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Global System Prompt</Text>
-            <Text style={styles.badgeInfo}>All recordings</Text>
-          </View>
+          <Text style={styles.cardTitle}>Global System Prompt</Text>
           <Text style={styles.cardDesc}>
             Applied before the selected mode prompt for app and overlay recordings.
           </Text>
@@ -158,25 +173,19 @@ export default function Settings({
             multiline
             textAlignVertical="top"
           />
-          <View style={styles.actionRow}>
-            <ActionButton label="Use default" onPress={onApplyDefaultGlobalPrompt} primary />
-            <ActionButton label="Clear" onPress={onResetGlobalPrompt} />
-          </View>
         </View>
 
         <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Mode Prompts</Text>
-            <Text style={styles.badgeInfo}>Current: {MODES[currentMode].name}</Text>
-          </View>
+          <Text style={styles.cardTitle}>Mode Prompts</Text>
+          <Text style={styles.badgeInfo}>Current mode: {MODES[currentMode].name}</Text>
           <Text style={styles.cardDesc}>
             Edit each mode prompt directly. These changes also apply to the overlay service.
           </Text>
           {(Object.keys(MODES) as ModeId[]).map((modeId) => (
             <View key={modeId} style={styles.modeCard}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.modeTitle}>{MODES[modeId].name}</Text>
-                <TouchableOpacity onPress={() => onResetModePrompt(modeId)}>
+              <View style={styles.modeHeaderRow}>
+                <Text style={[styles.modeTitle, styles.modeTitleText]}>{MODES[modeId].name}</Text>
+                <TouchableOpacity style={styles.inlineActionButton} onPress={() => confirmResetModePrompt(modeId)}>
                   <Text style={styles.inlineAction}>Reset</Text>
                 </TouchableOpacity>
               </View>
@@ -217,7 +226,7 @@ export default function Settings({
           ))}
           {history.length > 0 && (
             <View style={styles.actionRow}>
-              <ActionButton label="Clear history" onPress={onClearHistory} />
+              <ActionButton label="Clear history" onPress={confirmClearHistory} />
             </View>
           )}
         </View>
@@ -284,6 +293,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text,
   },
+  modeTitleText: {
+    flex: 1,
+    paddingRight: 12,
+  },
   cardDesc: {
     fontFamily: fonts.sans,
     fontSize: 13,
@@ -344,6 +357,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  modeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   badge: {
     fontFamily: fonts.mono,
     fontSize: 10,
@@ -361,6 +379,17 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 11,
     color: colors.teal,
+  },
+  inlineActionButton: {
+    minWidth: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   historyCard: {
     backgroundColor: colors.surface2,

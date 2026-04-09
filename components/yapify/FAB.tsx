@@ -35,6 +35,12 @@ export const MODES: Record<ModeId, { emoji: string; name: string; prompt: string
   },
 };
 
+const MODE_EMOJIS: Record<Exclude<ModeId, 'default'>, string> = {
+  email: '\u2709\ufe0f',
+  quick: '\ud83d\udcac',
+  ai: '\ud83e\udd16',
+};
+
 type Props = {
   fabState: FabState;
   currentMode: ModeId;
@@ -46,6 +52,7 @@ type Props = {
 };
 
 const FAB_SIZE = 56;
+const FAB_CONTAINER_SIZE = 76;
 const DOT_SIZE = 20;
 const CHIP_MODES: ModeId[] = ['default', 'email', 'quick', 'ai'];
 
@@ -239,8 +246,8 @@ export default function FAB({
     position: 'absolute',
     left: fabX.value,
     top: fabY.value,
-    width: FAB_SIZE,
-    height: FAB_SIZE,
+    width: FAB_CONTAINER_SIZE,
+    height: FAB_CONTAINER_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
@@ -300,9 +307,9 @@ export default function FAB({
               {isProcessing ? (
                 <ActivityIndicator size="small" color={colors.teal} />
               ) : currentMode === 'default' ? (
-                <Image source={require('../../assets/yapify-logo.png')} style={styles.logoIcon} />
+                <Image source={require('../../assets/mic-stars.png')} style={styles.logoIcon} />
               ) : (
-                <Text style={styles.modeEmoji}>{MODES[currentMode].emoji}</Text>
+                <Text style={styles.modeEmoji}>{MODE_EMOJIS[currentMode as Exclude<ModeId, 'default'>]}</Text>
               )}
             </Reanimated.View>
           </GestureDetector>
@@ -340,8 +347,8 @@ function AnimatedChip({ mode, litModeShared, onRef }: {
       <View style={styles.chipRow}>
         <View style={styles.chipIconWrap}>
           {mode === 'default'
-            ? <Image source={require('../../assets/yapify-logo.png')} style={styles.chipLogo} />
-            : <Text style={styles.chipEmoji}>{MODES[mode].emoji}</Text>
+            ? <Image source={require('../../assets/mic-stars.png')} style={styles.chipLogo} />
+            : <Text style={styles.chipEmoji}>{MODE_EMOJIS[mode as Exclude<ModeId, 'default'>]}</Text>
           }
         </View>
         <Text style={styles.chipText} numberOfLines={1}>{MODES[mode].name}</Text>
