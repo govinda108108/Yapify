@@ -47,4 +47,19 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
     fun saveApiKey(key: String) {
         ApiKeyStore.setKey(reactContext, key)
     }
+
+    @ReactMethod
+    fun saveGlobalPrompt(prompt: String) {
+        ApiKeyStore.setGlobalPrompt(reactContext, prompt)
+    }
+
+    @ReactMethod
+    fun saveSelectedMode(modeId: String) {
+        ApiKeyStore.setSelectedMode(reactContext, modeId)
+    }
+
+    @ReactMethod
+    fun saveModePrompt(modeId: String, prompt: String) {
+        ApiKeyStore.setModePrompt(reactContext, modeId, prompt)
+    }
 }

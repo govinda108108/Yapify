@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
@@ -15,14 +15,23 @@ type Props = {
   editProcessing: boolean;
   topPosition: number;
   onInject: () => void;
+  onCopy: () => void;
   onEdit: () => void;
   onStopEdit: () => void;
   onDismiss: () => void;
 };
 
 export default function Toast({
-  output, mode, editing, editProcessing, topPosition,
-  onInject, onEdit, onStopEdit, onDismiss,
+  output,
+  mode,
+  editing,
+  editProcessing,
+  topPosition,
+  onInject,
+  onCopy,
+  onEdit,
+  onStopEdit,
+  onDismiss,
 }: Props) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(-6);
@@ -36,13 +45,13 @@ export default function Toast({
     opacity.value = withTiming(1, { duration: 200 });
     translateY.value = withTiming(0, { duration: 200 });
     toastTop.value = topPosition;
-  }, []);
+  }, [opacity, topPosition, toastTop, translateY]);
 
   useEffect(() => {
     if (!isDragging.value) {
       toastTop.value = withTiming(topPosition, { duration: 150 });
     }
-  }, [topPosition]);
+  }, [isDragging, toastTop, topPosition]);
 
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,7 +63,8 @@ export default function Toast({
     })
     .onChange((e) => {
       'worklet';
-      const dx = Math.abs(e.translationX), dy = Math.abs(e.translationY);
+      const dx = Math.abs(e.translationX);
+      const dy = Math.abs(e.translationY);
       if (dx > 8 || dy > 8) {
         runOnJS(cancelHold)();
       }
@@ -97,46 +107,44 @@ export default function Toast({
 
   return (
     <Reanimated.View style={[styles.toast, toastStyle]}>
-        {/* Drag handle — gesture only on this */}
-        <GestureDetector gesture={handleGesture}>
-          <View style={styles.dragHandleHitArea}>
-            <View style={styles.dragHandle} />
-          </View>
-        </GestureDetector>
-
-        {/* Label row */}
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>Output</Text>
-          <View style={styles.modeBadge}>
-            <Text style={styles.modeBadgeText}>{emoji} {name}</Text>
-          </View>
+      <GestureDetector gesture={handleGesture}>
+        <View style={styles.dragHandleHitArea}>
+          <View style={styles.dragHandle} />
         </View>
+      </GestureDetector>
 
-        {/* Output text */}
-        <ScrollView style={styles.textScroll} showsVerticalScrollIndicator={false}>
-          <Text style={styles.outputText}>{output}</Text>
-        </ScrollView>
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>Output</Text>
+        <View style={styles.modeBadge}>
+          <Text style={styles.modeBadgeText}>{emoji} {name}</Text>
+        </View>
+      </View>
 
-        {/* Edit bar (when editing) */}
-        {editing && (
-          <ToastEditBar processing={editProcessing} onStop={onStopEdit} />
-        )}
+      <ScrollView style={styles.textScroll} showsVerticalScrollIndicator={false}>
+        <Text style={styles.outputText}>{output}</Text>
+      </ScrollView>
 
-        {/* Action buttons */}
-        {!editing && (
-          <View style={styles.actions}>
-            <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onInject}>
-              <Text style={[styles.btnText, styles.btnTextPrimary]}>Insert ↓</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btn} onPress={onEdit}>
-              <Text style={styles.btnText}>✏️ Edit</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btn} onPress={onDismiss}>
-              <Text style={styles.btnText}>Dismiss</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </Reanimated.View>
+      {editing && (
+        <ToastEditBar processing={editProcessing} onStop={onStopEdit} />
+      )}
+
+      {!editing && (
+        <View style={styles.actions}>
+          <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onInject}>
+            <Text style={[styles.btnText, styles.btnTextPrimary]}>Insert</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={onCopy}>
+            <Text style={styles.btnText}>Copy</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={onEdit}>
+            <Text style={styles.btnText}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={onDismiss}>
+            <Text style={styles.btnText}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </Reanimated.View>
   );
 }
 
@@ -199,11 +207,13 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 2,
   },
   btn: {
-    flex: 1,
+    minWidth: '23%',
+    flexGrow: 1,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: colors.surface2,

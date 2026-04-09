@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, {
-  useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS,
+  useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS, SharedValue,
 } from 'react-native-reanimated';
 import { colors, fonts } from '../../constants/theme';
 
@@ -320,7 +320,7 @@ export default function FAB({
 
 function AnimatedChip({ mode, litModeShared, onRef }: {
   mode: ModeId;
-  litModeShared: Reanimated.SharedValue<string>;
+  litModeShared: SharedValue<string>;
   onRef: (r: View | null) => void;
 }) {
   const chipStyle = useAnimatedStyle(() => {

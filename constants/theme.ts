@@ -14,3 +14,22 @@ export const fonts = {
   sans: 'DMSans',
   mono: 'DMMono',
 };
+
+export const Colors = {
+  light: {
+    text: colors.text,
+    background: colors.bg,
+    tint: colors.teal,
+    icon: colors.muted,
+    tabIconDefault: colors.muted,
+    tabIconSelected: colors.teal,
+  },
+  dark: {
+    text: colors.text,
+    background: colors.bg,
+    tint: colors.teal,
+    icon: colors.muted,
+    tabIconDefault: colors.muted,
+    tabIconSelected: colors.teal,
+  },
+};

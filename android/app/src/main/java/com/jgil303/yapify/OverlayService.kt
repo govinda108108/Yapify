@@ -96,6 +96,8 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        currentMode = modes.firstOrNull { it.id == ApiKeyStore.getSelectedMode(this) } ?: modes[0]
+        pendingMode = currentMode
         startFg()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         buildFabContainer()
@@ -338,7 +340,7 @@ class OverlayService : Service() {
                             if (pendingMinimise) {
                                 minimise()
                             } else {
-                                currentMode = pendingMode
+                                confirmModeSelection()
                                 transitionTo(State.EXPANDED)
                             }
                         }
@@ -522,6 +524,12 @@ class OverlayService : Service() {
         }
     }
 
+    private fun confirmModeSelection() {
+        currentMode = pendingMode
+        ApiKeyStore.setSelectedMode(this, currentMode.id)
+        Log.d(TAG, "Mode: ${currentMode.name}")
+    }
+
     private fun dismissModeTray() {
         modeTrayWindow?.let { runCatching { wm.removeView(it) } }
         modeTrayWindow = null; chipViews.clear()
@@ -671,7 +679,9 @@ class OverlayService : Service() {
         }
         try {
             val transcript = transcribe(file, key)
-            val output = chat(currentMode.prompt, transcript, key)
+            Log.d(TAG, "Transcript: $transcript")
+            val output = chat(composeSystemPrompt(getModePrompt(currentMode)), transcript, key)
+            Log.d(TAG, "Output length: ${output.length}")
             currentOutput = output
             main.post { transitionTo(State.IDLE); showResultCard(output) }
         } catch (e: Exception) {
@@ -685,7 +695,7 @@ class OverlayService : Service() {
         try {
             val instruction = transcribe(file, key)
             val editPrompt = "You are an editor. The user will give you a piece of text and a spoken instruction for how to change it. Apply the instruction and return only the updated text -- no commentary, no explanation, no preamble."
-            val updated = chat(editPrompt, "Text:\n$currentOutput\n\nEdit instruction: $instruction", key)
+            val updated = chat(composeSystemPrompt(editPrompt), "Text:\n$currentOutput\n\nEdit instruction: $instruction", key)
             currentOutput = updated
             main.post { outputTextView?.text = updated; resetToResult() }
         } catch (e: Exception) {
@@ -748,6 +758,18 @@ class OverlayService : Service() {
     }
 
     // ─── Result card ──────────────────────────────────────────────────────────
+
+    private fun composeSystemPrompt(modePrompt: String): String {
+        val globalPrompt = ApiKeyStore.getGlobalPrompt(this)?.trim().orEmpty()
+        return if (globalPrompt.isEmpty()) {
+            modePrompt
+        } else {
+            "$globalPrompt\n\nMode-specific instruction:\n$modePrompt"
+        }
+    }
+
+    private fun getModePrompt(mode: ModeData): String =
+        ApiKeyStore.getModePrompt(this, mode.id, mode.prompt)
 
     private fun showResultCard(output: String) {
         dismissResultCard()
@@ -861,9 +883,17 @@ class OverlayService : Service() {
             dismissResultCard(); state = State.IDLE
         }
 
+        val btnCopy = cardBtn("Copy", primary = false) {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("yapify", currentOutput))
+            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+        }
+
         btnRow.addView(btnInsert, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             .apply { marginEnd = gap })
         btnRow.addView(btnEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            .apply { marginEnd = gap })
+        btnRow.addView(btnCopy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             .apply { marginEnd = gap })
         btnRow.addView(btnDismiss, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         actionButtonsRow = btnRow

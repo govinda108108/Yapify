@@ -25,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
             PackageList(this).packages.apply {
               add(OverlayPackage())
               add(AccessibilityPackage())
+              add(ClipboardPackage())
             }
 
           override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
