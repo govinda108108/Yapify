@@ -149,8 +149,8 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = sw - FAB_SIZE_DP.dp - 24.dp
+            gravity = Gravity.TOP or Gravity.END
+            x = 16.dp
             y = 200.dp
         }
         wm.addView(fabContainer, fabParams)
@@ -181,8 +181,8 @@ class OverlayService : Service() {
                     val dx = e.rawX - startX; val dy = e.rawY - startY
                     if (!moved && (kotlin.math.abs(dx) > 5.dp || kotlin.math.abs(dy) > 5.dp)) moved = true
                     if (moved) {
-                        fabParams.x = (fabInitX + dx).toInt()
-                        fabParams.y = (fabInitY + dy).toInt()
+                        fabParams.x = (fabInitX - dx).toInt().coerceAtLeast(0) // Gravity.END: right→decrease x
+                        fabParams.y = (fabInitY + dy).toInt().coerceAtLeast(0)
                         runCatching { wm.updateViewLayout(fabContainer, fabParams) }
                     }
                     true
@@ -315,8 +315,8 @@ class OverlayService : Service() {
                                 main.removeCallbacks(longPressRunnable)
                             }
                             if (fabDragging) {
-                                fabParams.x = (fabInitX + dx).toInt()
-                                fabParams.y = (fabInitY + dy).toInt()
+                                fabParams.x = (fabInitX - dx).toInt().coerceAtLeast(0)
+                                fabParams.y = (fabInitY + dy).toInt().coerceAtLeast(0)
                                 runCatching { wm.updateViewLayout(fabContainer, fabParams) }
                             }
                         }
@@ -331,7 +331,7 @@ class OverlayService : Service() {
                             dismissModeTray()
                             transitionTo(State.EXPANDED)
                         }
-                        State.EXPANDED  -> if (!fabDragging) transitionTo(State.RECORDING)
+                        State.EXPANDED  -> if (!fabDragging) startRecording()
                         State.RECORDING -> if (!fabDragging) stopRecording()
                         else -> {}
                     }
@@ -390,8 +390,9 @@ class OverlayService : Service() {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = fabParams.x + FAB_SIZE_DP.dp - trayW
+            // Gravity.END: x = distance from right edge, right-align tray with FAB
+            gravity = Gravity.TOP or Gravity.END
+            x = fabParams.x
             y = fabParams.y - modes.size * 52.dp - 8.dp
         })
     }
