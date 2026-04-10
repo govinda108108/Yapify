@@ -22,8 +22,10 @@ type Props = {
   history: HistoryItem[];
   overlayGranted: boolean;
   accessibilityEnabled: boolean;
+  showOnlyDuringTextInput: boolean;
   onApiKeyChange: (k: string) => void;
   onGlobalPromptChange: (prompt: string) => void;
+  onShowOnlyDuringTextInputChange: (enabled: boolean) => void;
   onModePromptChange: (modeId: ModeId, prompt: string) => void;
   onResetModePrompt: (modeId: ModeId) => void;
   onRestoreHistoryItem: (item: HistoryItem) => void;
@@ -59,8 +61,10 @@ export default function Settings({
   history,
   overlayGranted,
   accessibilityEnabled,
+  showOnlyDuringTextInput,
   onApiKeyChange,
   onGlobalPromptChange,
+  onShowOnlyDuringTextInputChange,
   onModePromptChange,
   onResetModePrompt,
   onRestoreHistoryItem,
@@ -134,6 +138,20 @@ export default function Settings({
             <ActionButton label="Test overlay" onPress={onTestOverlay} />
             <ActionButton label="Test inject" onPress={onTestInject} />
           </View>
+          <TouchableOpacity
+            style={styles.toggleRow}
+            onPress={() => onShowOnlyDuringTextInputChange(!showOnlyDuringTextInput)}
+          >
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleTitle}>Show Yapi only during text input</Text>
+              <Text style={styles.toggleDesc}>
+                Hide the floating dot unless an editable field is currently focused.
+              </Text>
+            </View>
+            <View style={[styles.togglePill, showOnlyDuringTextInput && styles.togglePillActive]}>
+              <View style={[styles.toggleKnob, showOnlyDuringTextInput && styles.toggleKnobActive]} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -417,5 +435,54 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 13,
     color: colors.muted,
+  },
+  toggleRow: {
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toggleCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  toggleTitle: {
+    fontFamily: fonts.sans + '_Bold',
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  toggleDesc: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+  },
+  togglePill: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  togglePillActive: {
+    backgroundColor: 'rgba(46,196,182,0.16)',
+    borderColor: 'rgba(46,196,182,0.3)',
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.muted,
+  },
+  toggleKnobActive: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.teal,
   },
 });

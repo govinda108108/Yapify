@@ -4,10 +4,12 @@ import { colors, fonts } from '../../constants/theme';
 
 type Props = {
   processing: boolean;
+  activeLabel: string;
+  processingLabel: string;
   onStop: () => void;
 };
 
-export default function ToastEditBar({ processing, onStop }: Props) {
+export default function ToastEditBar({ processing, activeLabel, processingLabel, onStop }: Props) {
   const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function ToastEditBar({ processing, onStop }: Props) {
     return (
       <View style={[styles.bar, styles.processingBar]}>
         <Animated.View style={styles.spinner} />
-        <Text style={styles.label}>Updating...</Text>
+        <Text style={styles.label}>{processingLabel}</Text>
       </View>
     );
   }
@@ -35,7 +37,7 @@ export default function ToastEditBar({ processing, onStop }: Props) {
   return (
     <View style={styles.bar}>
       <Animated.View style={[styles.dot, { opacity: pulse }]} />
-      <Text style={styles.label}>Speak your edit...</Text>
+      <Text style={styles.label}>{activeLabel}</Text>
       <TouchableOpacity onPress={onStop} hitSlop={8}>
         <Text style={styles.stop}>Stop</Text>
       </TouchableOpacity>

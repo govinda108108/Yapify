@@ -24,8 +24,8 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="yapify"/>
-        <data android:scheme="exp+yapify"/>
+        <data android:scheme="yapi-dev"/>
+        <data android:scheme="exp+yapi-dev"/>
       </intent-filter>
     </activity>
     <service android:name=".OverlayService" android:foregroundServiceType="microphone" android:exported="false"/>

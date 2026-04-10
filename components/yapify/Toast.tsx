@@ -13,11 +13,15 @@ type Props = {
   mode: ModeId;
   editing: boolean;
   editProcessing: boolean;
+  addingMore: boolean;
+  addMoreProcessing: boolean;
   topPosition: number;
   onInject: () => void;
   onCopy: () => void;
+  onAddMore: () => void;
   onEdit: () => void;
   onStopEdit: () => void;
+  onStopAddMore: () => void;
   onDismiss: () => void;
 };
 
@@ -26,11 +30,15 @@ export default function Toast({
   mode,
   editing,
   editProcessing,
+  addingMore,
+  addMoreProcessing,
   topPosition,
   onInject,
   onCopy,
+  onAddMore,
   onEdit,
   onStopEdit,
+  onStopAddMore,
   onDismiss,
 }: Props) {
   const opacity = useSharedValue(0);
@@ -104,6 +112,8 @@ export default function Toast({
   }));
 
   const { emoji, name } = MODES[mode];
+  const busyMode = editing ? 'edit' : addingMore ? 'add' : null;
+  const busyProcessing = editing ? editProcessing : addMoreProcessing;
 
   return (
     <Reanimated.View style={[styles.toast, toastStyle]}>
@@ -115,8 +125,16 @@ export default function Toast({
 
       <View style={styles.labelRow}>
         <Text style={styles.label}>Output</Text>
-        <View style={styles.modeBadge}>
-          <Text style={styles.modeBadgeText}>{emoji} {name}</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconButton} onPress={onCopy} hitSlop={12}>
+            <Text style={styles.iconButtonText}>⧉</Text>
+          </TouchableOpacity>
+          <View style={styles.modeBadge}>
+            <Text style={styles.modeBadgeText}>{emoji} {name}</Text>
+          </View>
+          <TouchableOpacity style={styles.dismissButton} onPress={onDismiss} hitSlop={14}>
+            <Text style={styles.dismissButtonText}>×</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -124,23 +142,25 @@ export default function Toast({
         <Text style={styles.outputText}>{output}</Text>
       </ScrollView>
 
-      {editing && (
-        <ToastEditBar processing={editProcessing} onStop={onStopEdit} />
+      {busyMode && (
+        <ToastEditBar
+          processing={busyProcessing}
+          activeLabel={busyMode === 'edit' ? 'Speak your edit...' : 'Speak what to add...'}
+          processingLabel={busyMode === 'edit' ? 'Updating...' : 'Adding more...'}
+          onStop={busyMode === 'edit' ? onStopEdit : onStopAddMore}
+        />
       )}
 
-      {!editing && (
+      {!busyMode && (
         <View style={styles.actions}>
           <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onInject}>
             <Text style={[styles.btnText, styles.btnTextPrimary]}>Insert</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} onPress={onCopy}>
-            <Text style={styles.btnText}>Copy</Text>
+          <TouchableOpacity style={styles.btn} onPress={onAddMore}>
+            <Text style={styles.btnText}>Add more</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.btn} onPress={onEdit}>
             <Text style={styles.btnText}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} onPress={onDismiss}>
-            <Text style={styles.btnText}>Dismiss</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -175,6 +195,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   label: {
     fontFamily: fonts.mono,
     fontSize: 10,
@@ -195,6 +220,37 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.teal,
   },
+  iconButton: {
+    minWidth: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: 'rgba(46,196,182,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconButtonText: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    color: colors.teal,
+  },
+  dismissButton: {
+    minWidth: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(236,238,240,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(236,238,240,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissButtonText: {
+    fontFamily: fonts.sans,
+    fontSize: 20,
+    lineHeight: 22,
+    color: colors.muted,
+  },
   textScroll: {
     maxHeight: 120,
     marginBottom: 10,
@@ -207,12 +263,10 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
     marginTop: 2,
   },
   btn: {
-    minWidth: '23%',
     flexGrow: 1,
     paddingVertical: 8,
     borderRadius: 8,

@@ -20,7 +20,7 @@ class ClipboardModule(private val reactContext: ReactApplicationContext) :
             promise.resolve(false)
             return
         }
-        clipboard.setPrimaryClip(ClipData.newPlainText("yapify", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText("yapi", text))
         promise.resolve(true)
     }
 }

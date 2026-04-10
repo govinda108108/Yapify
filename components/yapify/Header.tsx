@@ -15,7 +15,7 @@ export default function Header({ onSettingsPress }: Props) {
           <View style={styles.logoMid} />
           <View style={styles.logoInner} />
         </View>
-        <Text style={styles.wordmark}>Yapify</Text>
+        <Text style={styles.wordmark}>Yapi</Text>
       </View>
       <TouchableOpacity onPress={onSettingsPress} hitSlop={12}>
         <Text style={styles.gear}>⚙</Text>

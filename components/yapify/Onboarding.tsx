@@ -65,7 +65,7 @@ export default function Onboarding({
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.kicker}>First Run Setup</Text>
-          <Text style={styles.title}>Set up Yapify before you rely on the floating dot.</Text>
+          <Text style={styles.title}>Set up Yapi before you rely on the floating dot.</Text>
           <Text style={styles.subtitle}>
             Finish all three checks. The overlay flow is not complete until API, overlay, and injection are ready.
           </Text>
@@ -92,7 +92,7 @@ export default function Onboarding({
 
         <StepRow
           title="Overlay Permission"
-          description="Lets Yapify keep the floating dot above other apps."
+          description="Lets Yapi keep the floating dot above other apps."
           ready={overlayGranted}
           actionLabel={overlayGranted ? 'Reopen overlay settings' : 'Enable overlay'}
           onPress={onRequestOverlay}
@@ -100,7 +100,7 @@ export default function Onboarding({
 
         <StepRow
           title="Accessibility"
-          description="Lets Yapify inject text into the active field from the result card."
+          description="Lets Yapi inject text into the active field from the result card."
           ready={accessibilityEnabled}
           actionLabel={accessibilityEnabled ? 'Reopen accessibility settings' : 'Enable accessibility'}
           onPress={onOpenAccessibility}

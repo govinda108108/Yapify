@@ -24,7 +24,12 @@ import java.net.URL
 class OverlayService : Service() {
 
     private enum class State {
-        IDLE, EXPANDED, SELECTING, RECORDING, PROCESSING, EDIT_RECORDING, EDIT_PROCESSING
+        IDLE, EXPANDED, SELECTING, RECORDING, PROCESSING, EDIT_RECORDING, EDIT_PROCESSING,
+        ADD_MORE_RECORDING, ADD_MORE_PROCESSING
+    }
+
+    private enum class CardAction {
+        EDIT, ADD_MORE
     }
 
     private data class ModeData(val id: String, val emoji: String, val name: String, val prompt: String)
@@ -69,6 +74,7 @@ class OverlayService : Service() {
     private var editBarContainer: LinearLayout? = null
     private var pulseAnimator: ValueAnimator? = null
     private var editSpinnerAnim: ObjectAnimator? = null
+    private var activeCardAction: CardAction? = null
 
     // State
     private var state = State.IDLE
@@ -82,6 +88,7 @@ class OverlayService : Service() {
     private var fabInitX = 0; private var fabInitY = 0
     private var fabTouchX = 0f; private var fabTouchY = 0f
     private var fabDragging = false
+    private var overlayVisibilityRunnable: Runnable? = null
 
     private val main = Handler(Looper.getMainLooper())
 
@@ -102,6 +109,7 @@ class OverlayService : Service() {
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         buildFabContainer()
         buildSmallDot()
+        startOverlayVisibilityWatcher()
         checkApiKey()
     }
 
@@ -112,6 +120,7 @@ class OverlayService : Service() {
         pulseAnimator?.cancel()
         editSpinnerAnim?.cancel()
         recorder?.release()
+        overlayVisibilityRunnable = null
         runCatching { wm.removeView(fabContainer) }
         modeTrayWindow?.let { runCatching { wm.removeView(it) } }
         cardWindow?.let { runCatching { wm.removeView(it) } }
@@ -123,11 +132,11 @@ class OverlayService : Service() {
     private fun startFg() {
         val ch = "yapify_overlay"
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(ch, "Yapify", NotificationManager.IMPORTANCE_MIN)
+            NotificationChannel(ch, "Yapi", NotificationManager.IMPORTANCE_MIN)
                 .apply { setShowBadge(false) }
         )
         startForeground(1, Notification.Builder(this, ch)
-            .setContentTitle("Yapify")
+            .setContentTitle("Yapi")
             .setContentText("Tap dot to expand  •  Hold to change mode")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .build())
@@ -137,7 +146,7 @@ class OverlayService : Service() {
         main.postDelayed({
             if (ApiKeyStore.getKey(this) == null) {
                 Toast.makeText(this,
-                    "Yapify: No API key set — open Yapify to configure",
+                    "Yapi: No API key set - open Yapi to configure",
                     Toast.LENGTH_LONG).show()
             }
         }, 500L)
@@ -169,7 +178,7 @@ class OverlayService : Service() {
 
     private fun buildSmallDot() {
         clearFabViews()
-        resizeFabContainer(DOT_SIZE_DP + 16, DOT_SIZE_DP + 16)
+        resizeFabContainer(SMALL_DOT_TOUCH_DP, SMALL_DOT_TOUCH_DP)
 
         val dot = View(this).apply {
             background = ovalDrawable(C_TEAL)
@@ -539,7 +548,7 @@ class OverlayService : Service() {
         val ch = "yapify_overlay"
         getSystemService(NotificationManager::class.java).notify(1,
             Notification.Builder(this, ch)
-                .setContentTitle("Yapify")
+                .setContentTitle("Yapi")
                 .setContentText("Tap dot to expand  •  Hold to change mode")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .build())
@@ -554,7 +563,7 @@ class OverlayService : Service() {
         val ch = "yapify_overlay"
         getSystemService(NotificationManager::class.java).notify(1,
             Notification.Builder(this, ch)
-                .setContentTitle("Yapify")
+                .setContentTitle("Yapi")
                 .setContentText("Tap dot to expand  •  Hold to change mode")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .build())
@@ -605,6 +614,7 @@ class OverlayService : Service() {
                 setAudioSamplingRate(44100); setAudioEncodingBitRate(128000)
                 setOutputFile(f.absolutePath); prepare(); start()
             }
+            activeCardAction = CardAction.EDIT
             state = State.EDIT_RECORDING
             main.post { showEditBar(processing = false) }
         } catch (e: Exception) {
@@ -620,6 +630,36 @@ class OverlayService : Service() {
         main.post { showEditBar(processing = true) }
         val f = audioFile ?: run { showErr("No audio"); resetToResult(); return }
         Thread { editPipeline(f) }.start()
+    }
+
+    private fun startAddMoreRecording() {
+        val f = File(cacheDir, "yapify_add_more.m4a").also { audioFile = it }
+        try {
+            @Suppress("DEPRECATION")
+            recorder = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                MediaRecorder(this) else MediaRecorder()).apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setAudioSamplingRate(44100); setAudioEncodingBitRate(128000)
+                setOutputFile(f.absolutePath); prepare(); start()
+            }
+            activeCardAction = CardAction.ADD_MORE
+            state = State.ADD_MORE_RECORDING
+            main.post { showEditBar(processing = false) }
+        } catch (e: Exception) {
+            recorder?.release(); recorder = null
+            showErr("Mic error: ${e.message}")
+        }
+    }
+
+    private fun stopAddMoreRecording() {
+        runCatching { recorder?.stop() }
+        recorder?.release(); recorder = null
+        state = State.ADD_MORE_PROCESSING
+        main.post { showEditBar(processing = true) }
+        val f = audioFile ?: run { showErr("No audio"); resetToResult(); return }
+        Thread { addMorePipeline(f) }.start()
     }
 
     private fun startTimer() {
@@ -665,7 +705,7 @@ class OverlayService : Service() {
 
     private fun pipeline(file: File) {
         val key = ApiKeyStore.getKey(this) ?: run {
-            showErr("No API key — open Yapify settings first")
+            showErr("No API key - open Yapi settings first")
             main.post { transitionTo(State.EXPANDED) }; return
         }
         try {
@@ -698,8 +738,25 @@ class OverlayService : Service() {
         }
     }
 
+    private fun addMorePipeline(file: File) {
+        val key = ApiKeyStore.getKey(this) ?: run { showErr("No API key"); resetToResult(); return }
+        try {
+            val transcript = transcribe(file, key)
+            val added = chat(composeSystemPrompt(getModePrompt(currentMode)), transcript, key)
+            currentOutput = appendProcessedOutput(currentOutput, added)
+            main.post {
+                outputTextView?.text = currentOutput
+                resetToResult()
+            }
+        } catch (e: Exception) {
+            showErr(e.message ?: "Add more failed")
+            main.post { resetToResult() }
+        }
+    }
+
     private fun resetToResult() {
         state = State.IDLE
+        activeCardAction = null
         main.post { showEditBar(null) }
     }
 
@@ -813,9 +870,28 @@ class OverlayService : Service() {
             letterSpacing = 0.05f
         }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
+        val topRight = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        topRight.addView(ImageView(this).apply {
+            setImageResource(android.R.drawable.ic_menu_share)
+            setColorFilter(Color.parseColor(C_TEAL))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor(C_SURFACE2))
+                cornerRadius = 14 * d
+                setStroke(1.dp, Color.parseColor("#2f2ec4b6"))
+            }
+            val pad = 6.dp; setPadding(pad, pad, pad, pad)
+            setOnClickListener {
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("yapi", currentOutput))
+                Toast.makeText(this@OverlayService, "Copied", Toast.LENGTH_SHORT).show()
+            }
+        }, LinearLayout.LayoutParams(28.dp, 28.dp).apply { marginEnd = 8.dp })
         val modeLabel = if (currentMode.emoji.isEmpty()) currentMode.name
                         else "${currentMode.emoji} ${currentMode.name}"
-        labelRow.addView(TextView(this).apply {
+        topRight.addView(TextView(this).apply {
             text = modeLabel; textSize = 10f
             setTextColor(Color.parseColor(C_TEAL))
             val hp = 8.dp; val vp = 2.dp; setPadding(hp, vp, hp, vp)
@@ -825,7 +901,30 @@ class OverlayService : Service() {
                 setStroke(1.dp, Color.parseColor("#332ec4b6"))
             }
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT))
+            LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = 8.dp })
+        topRight.addView(TextView(this).apply {
+            text = "×"; textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor(C_MUTED))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#14eceef0"))
+                cornerRadius = 17 * d
+                setStroke(1.dp, Color.parseColor("#1feceef0"))
+            }
+            setOnClickListener {
+                if (state == State.EDIT_RECORDING || state == State.ADD_MORE_RECORDING) {
+                    runCatching { recorder?.stop() }
+                    recorder?.release()
+                    recorder = null
+                }
+                dismissResultCard()
+                restoreSmallDotAfterResult()
+            }
+        }, LinearLayout.LayoutParams(34.dp, 34.dp))
+        labelRow.addView(topRight, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
         card.addView(labelRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
@@ -859,42 +958,34 @@ class OverlayService : Service() {
         }
         val gap = 8.dp
 
-        val btnInsert = cardBtn("Insert ↓", primary = true) {
+        val btnInsert = cardBtn("Insert", primary = true) {
             val ok = YapifyAccessibilityService.injectText(currentOutput)
             if (ok) {
                 dismissResultCard()
                 restoreSmallDotAfterResult()
             }
-            else showErr("Enable Yapify in Accessibility Settings to inject text")
+            else showErr("Enable Yapi in Accessibility Settings to inject text")
         }
-        val btnEdit = cardBtn("✏ Edit", primary = false) {
+        val btnAddMore = cardBtn("Add more", primary = false) {
+            when (state) {
+                State.IDLE -> startAddMoreRecording()
+                State.ADD_MORE_RECORDING -> stopAddMoreRecording()
+                else -> {}
+            }
+        }
+        val btnEdit = cardBtn("Edit", primary = false) {
             when (state) {
                 State.IDLE -> startEditRecording()
                 State.EDIT_RECORDING -> stopEditRecording()
                 else -> {}
             }
         }
-        val btnDismiss = cardBtn("Dismiss", primary = false) {
-            if (state == State.EDIT_RECORDING) {
-                runCatching { recorder?.stop() }; recorder?.release(); recorder = null
-            }
-            dismissResultCard()
-            restoreSmallDotAfterResult()
-        }
-
-        val btnCopy = cardBtn("Copy", primary = false) {
-            val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-            clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("yapify", currentOutput))
-            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
-        }
-
         btnRow.addView(btnInsert, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             .apply { marginEnd = gap })
+        btnRow.addView(btnAddMore, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            .apply { marginEnd = gap })
         btnRow.addView(btnEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            .apply { marginEnd = gap })
-        btnRow.addView(btnCopy, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            .apply { marginEnd = gap })
-        btnRow.addView(btnDismiss, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            .apply { marginEnd = 0 })
         actionButtonsRow = btnRow
         card.addView(btnRow, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -963,6 +1054,7 @@ class OverlayService : Service() {
         cardWindow?.let { runCatching { wm.removeView(it) } }
         cardWindow = null; outputTextView = null
         editBarContainer = null; actionButtonsRow = null
+        activeCardAction = null
         currentOutput = ""
     }
 
@@ -1002,6 +1094,8 @@ class OverlayService : Service() {
             }
         }
 
+        val isAddMore = activeCardAction == CardAction.ADD_MORE
+
         if (processing) {
             // Teal ring spinner
             val spinner = View(this).apply {
@@ -1018,7 +1112,7 @@ class OverlayService : Service() {
             }
             bar.addView(View(this), LinearLayout.LayoutParams(10.dp, 1))
             bar.addView(TextView(this).apply {
-                text = "Updating..."; textSize = 11f
+                text = if (isAddMore) "Adding more..." else "Updating..."; textSize = 11f
                 setTextColor(Color.parseColor(C_MUTED))
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
@@ -1038,7 +1132,7 @@ class OverlayService : Service() {
             }
             bar.addView(View(this), LinearLayout.LayoutParams(10.dp, 1))
             bar.addView(TextView(this).apply {
-                text = "Speak your edit..."; textSize = 11f
+                text = if (isAddMore) "Speak what to add..." else "Speak your edit..."; textSize = 11f
                 setTextColor(Color.parseColor(C_MUTED))
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             bar.addView(View(this), LinearLayout.LayoutParams(10.dp, 1))
@@ -1051,7 +1145,9 @@ class OverlayService : Service() {
                     cornerRadius = 6 * d
                     setStroke(1.dp, Color.parseColor(C_BORDER))
                 }
-                setOnClickListener { stopEditRecording() }
+                setOnClickListener {
+                    if (isAddMore) stopAddMoreRecording() else stopEditRecording()
+                }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT))
         }
@@ -1080,9 +1176,45 @@ class OverlayService : Service() {
         shape = GradientDrawable.OVAL; setColor(Color.parseColor(hex))
     }
 
+    private fun startOverlayVisibilityWatcher() {
+        overlayVisibilityRunnable = object : Runnable {
+            override fun run() {
+                refreshOverlayVisibility()
+                main.postDelayed(this, 700L)
+            }
+        }.also { main.post(it) }
+    }
+
+    private fun refreshOverlayVisibility() {
+        val showOnlyDuringInput = ApiKeyStore.getShowOnlyDuringTextInput(this)
+        val hasActiveField = YapifyAccessibilityService.hasActiveField()
+        val shouldHideDot = showOnlyDuringInput &&
+            cardWindow == null &&
+            (state == State.IDLE || state == State.EXPANDED || state == State.SELECTING) &&
+            !hasActiveField
+
+        if (shouldHideDot && (state == State.EXPANDED || state == State.SELECTING)) {
+            dismissModeTray()
+            transitionTo(State.IDLE)
+        }
+
+        if (cardWindow == null) {
+            fabContainer.visibility = if (shouldHideDot) View.INVISIBLE else View.VISIBLE
+        }
+    }
+
+    private fun appendProcessedOutput(base: String, addition: String): String {
+        val trimmedBase = base.trimEnd()
+        val trimmedAddition = addition.trim()
+        if (trimmedBase.isEmpty()) return trimmedAddition
+        if (trimmedAddition.isEmpty()) return trimmedBase
+        val separator = if (trimmedBase.last() in listOf('.', '!', '?', '\n')) "\n\n" else " "
+        return trimmedBase + separator + trimmedAddition
+    }
+
     private fun showErr(msg: String) {
         Log.e(TAG, msg)
-        main.post { Toast.makeText(this, "Yapify: $msg", Toast.LENGTH_LONG).show() }
+        main.post { Toast.makeText(this, "Yapi: $msg", Toast.LENGTH_LONG).show() }
     }
 
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
@@ -1101,7 +1233,8 @@ class OverlayService : Service() {
         private const val C_MUTED    = "#8a9199"
         private const val FAB_SIZE_DP       = 56
         private const val FAB_CONTAINER_DP  = 72   // FAB + ripple overflow space
-        private const val DOT_SIZE_DP       = 20
+        private const val SMALL_DOT_TOUCH_DP = 36
+        private const val DOT_SIZE_DP       = 15
         private const val TRAY_WIDTH_DP     = 164
 
         private const val PROMPT_DEFAULT = "You are a transcription cleaner. Clean up this raw voice transcript into natural, flowing sentences. Fix grammar and punctuation. Join short fragmented sentences together where it sounds natural. Do NOT change the tone, word choices, or meaning. Do NOT add formatting, bullet points, or structure. Just return clean, readable prose that sounds exactly like the speaker."

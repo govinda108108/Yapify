@@ -23,20 +23,37 @@ class YapifyAccessibilityService : AccessibilityService() {
         fun injectText(text: String): Boolean {
             val node = resolveEditableNode() ?: return false
             return try {
-                val args = Bundle().apply {
+                val currentText = node.text?.toString().orEmpty()
+                val selectionStart = node.textSelectionStart.takeIf { it >= 0 } ?: currentText.length
+                val selectionEnd = node.textSelectionEnd.takeIf { it >= 0 } ?: selectionStart
+                val safeStart = minOf(selectionStart, selectionEnd).coerceIn(0, currentText.length)
+                val safeEnd = maxOf(selectionStart, selectionEnd).coerceIn(safeStart, currentText.length)
+                val mergedText = buildString {
+                    append(currentText.substring(0, safeStart))
+                    append(text)
+                    append(currentText.substring(safeEnd))
+                }
+                val replaceArgs = Bundle().apply {
                     putCharSequence(
                         AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                        text
+                        mergedText
                     )
                 }
-                if (node.isEditable && node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) {
+
+                if (node.isEditable && node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, replaceArgs)) {
+                    val newCursor = safeStart + text.length
+                    val selectionArgs = Bundle().apply {
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, newCursor)
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, newCursor)
+                    }
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selectionArgs)
                     true
                 } else {
                     node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     val clipboard = instance?.getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
                         ?: return false
-                    clipboard.setPrimaryClip(ClipData.newPlainText("yapify", text))
+                    clipboard.setPrimaryClip(ClipData.newPlainText("yapi", text))
                     node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
                 }
             } catch (e: Exception) {

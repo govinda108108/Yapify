@@ -164,3 +164,41 @@ A watcher script copies the latest Android screenshot to `~/yapify/latest-screen
 - **In progress:** Standalone overlay recording (dot works without app open) -- EAS build failing
 - **Next:** Fix Gradle build error, test full overlay-only flow
 - **Planned:** Custom user-defined modes, onboarding, Play Store release, iOS
+
+## Restart Handoff (April 2026)
+- Repo was clean when restart context was requested.
+- Latest pushed commits:
+  - `55d309d` Use mic icon for FAB processing and overlay
+  - `f65ea59` Fix overlay minimize, injection flow, and settings polish
+  - `acd8573` Fix: don't apply global prompt to edit pipeline
+- Recent Android development build worked.
+- User wants confirmation before any new implementation is sent or committed.
+- Clipboard issue reported was with the chat app itself, not Windows globally.
+
+## Confirmed Next Spec
+- Freeze the current working app first before any new work.
+- Create a separate dev app version and do not overwrite the current installed app.
+- Dev version should have a different Android package name.
+- App display name should become `Yapi`.
+- Replace branding references from `Yapify` to `Yapi`, but do not break imports or config.
+- Use the mic-with-two-yellow-stars artwork for recording UI and app icon where suitable.
+- Insert text at the cursor position while preserving text before and after the cursor.
+- If text is selected, replace only the selected text.
+- Dismiss should be silent and final.
+- Minimize must always shrink back to the small dot.
+- Small dot should be 25% smaller visually while keeping the same touch area.
+- Redesign the close button with a larger softer tap target.
+- Add setting: `Show Yapi only during text input`.
+- Context-aware mode should depend on text-field focus, not keyboard visibility.
+- Context-aware mode should be optional; always-on floating mode should still exist.
+- Replace large `Copy` button with `Add more`.
+- `Add more` should immediately record and append new processed text to the existing card text.
+- Add a small copy icon in the top-right area of the card.
+- Remove the pencil icon from `Edit` and keep a text-only label.
+- Keep top-right card layout clean: copy icon, mode label, dismiss.
+
+## Clarifications Still Needed Before Implementation
+- Whether to tag the stable baseline in Git as well as committing it.
+- Exact dev Android package name to use.
+- Whether the rename should cover every `Yapify` occurrence or only user-facing branding.
+- Whether `Add more` should append processed final output or raw transcript.

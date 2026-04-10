@@ -7,6 +7,7 @@ object ApiKeyStore {
     private const val API_KEY = "api_key"
     private const val GLOBAL_PROMPT = "global_prompt"
     private const val SELECTED_MODE = "selected_mode"
+    private const val SHOW_ONLY_DURING_TEXT_INPUT = "show_only_during_text_input"
 
     fun getKey(ctx: Context): String? =
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -33,6 +34,15 @@ object ApiKeyStore {
     fun setSelectedMode(ctx: Context, modeId: String) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(SELECTED_MODE, modeId).apply()
+    }
+
+    fun getShowOnlyDuringTextInput(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(SHOW_ONLY_DURING_TEXT_INPUT, false)
+
+    fun setShowOnlyDuringTextInput(ctx: Context, enabled: Boolean) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putBoolean(SHOW_ONLY_DURING_TEXT_INPUT, enabled).apply()
     }
 
     fun getModePrompt(ctx: Context, modeId: String, fallback: String): String =

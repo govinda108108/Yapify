@@ -52,7 +52,8 @@ type Props = {
 
 const FAB_SIZE = 56;
 const FAB_CONTAINER_SIZE = 76;
-const DOT_SIZE = 20;
+const SMALL_DOT_TOUCH_SIZE = 36;
+const DOT_SIZE = 15;
 const CHIP_MODES: ModeId[] = ['default', 'email', 'quick', 'ai'];
 
 export default function FAB({
@@ -344,7 +345,9 @@ export default function FAB({
 
         {fabState === 'IDLE' && (
           <GestureDetector gesture={smallDotGesture}>
-            <Reanimated.View style={styles.smallDot} />
+            <Reanimated.View style={styles.smallDotHitArea}>
+              <View style={styles.smallDot} />
+            </Reanimated.View>
           </GestureDetector>
         )}
       </Reanimated.View>
@@ -417,6 +420,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 5,
     elevation: 4,
+  },
+  smallDotHitArea: {
+    width: SMALL_DOT_TOUCH_SIZE,
+    height: SMALL_DOT_TOUCH_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ripple: {
     position: 'absolute',

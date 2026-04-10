@@ -62,4 +62,9 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
     fun saveModePrompt(modeId: String, prompt: String) {
         ApiKeyStore.setModePrompt(reactContext, modeId, prompt)
     }
+
+    @ReactMethod
+    fun saveShowOnlyDuringTextInput(enabled: Boolean) {
+        ApiKeyStore.setShowOnlyDuringTextInput(reactContext, enabled)
+    }
 }

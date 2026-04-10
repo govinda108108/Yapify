@@ -89,7 +89,7 @@ android {
 
     namespace 'com.jgil303.yapify'
     defaultConfig {
-        applicationId 'com.jgil303.yapify'
+        applicationId 'com.jgil303.yapi.dev'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

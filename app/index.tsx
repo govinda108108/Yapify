@@ -27,6 +27,7 @@ const STORAGE_ONBOARDING_DONE = 'onboardingComplete';
 const STORAGE_SELECTED_MODE = 'selectedMode';
 const STORAGE_MODE_PROMPTS = 'modePrompts';
 const STORAGE_HISTORY = 'outputHistory';
+const STORAGE_SHOW_ONLY_DURING_INPUT = 'showOnlyDuringTextInput';
 const HISTORY_LIMIT = 12;
 
 type ModePromptMap = Record<ModeId, string>;
@@ -60,6 +61,8 @@ export default function YapifyScreen() {
   const [toastOutput, setToastOutput] = useState<string | null>(null);
   const [toastEditing, setToastEditing] = useState(false);
   const [toastEditProcessing, setToastEditProcessing] = useState(false);
+  const [toastAddingMore, setToastAddingMore] = useState(false);
+  const [toastAddMoreProcessing, setToastAddMoreProcessing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
@@ -69,6 +72,7 @@ export default function YapifyScreen() {
   const [kbHeight, setKbHeight] = useState(0);
   const [overlayGranted, setOverlayGranted] = useState(false);
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
+  const [showOnlyDuringTextInput, setShowOnlyDuringTextInput] = useState(false);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
@@ -93,6 +97,7 @@ export default function YapifyScreen() {
       STORAGE_SELECTED_MODE,
       STORAGE_MODE_PROMPTS,
       STORAGE_HISTORY,
+      STORAGE_SHOW_ONLY_DURING_INPUT,
     ]).then((entries) => {
       const values = Object.fromEntries(entries);
       const savedKey = values[STORAGE_API_KEY] ?? '';
@@ -101,6 +106,7 @@ export default function YapifyScreen() {
       const savedMode = values[STORAGE_SELECTED_MODE] as ModeId | null;
       const savedModePrompts = values[STORAGE_MODE_PROMPTS];
       const savedHistory = values[STORAGE_HISTORY];
+      const savedShowOnlyDuringInput = values[STORAGE_SHOW_ONLY_DURING_INPUT] === 'true';
 
       if (savedKey) {
         setApiKey(savedKey);
@@ -133,6 +139,8 @@ export default function YapifyScreen() {
           setHistory([]);
         }
       }
+      setShowOnlyDuringTextInput(savedShowOnlyDuringInput);
+      OverlayModule?.saveShowOnlyDuringTextInput?.(savedShowOnlyDuringInput);
       if (!onboardingDone) setOnboardingVisible(true);
     });
 
@@ -212,6 +220,12 @@ export default function YapifyScreen() {
   const handleResetModePrompt = useCallback((modeId: ModeId) => {
     handleModePromptChange(modeId, DEFAULT_MODE_PROMPTS[modeId]);
   }, [handleModePromptChange]);
+
+  const handleShowOnlyDuringTextInputChange = useCallback((enabled: boolean) => {
+    setShowOnlyDuringTextInput(enabled);
+    AsyncStorage.setItem(STORAGE_SHOW_ONLY_DURING_INPUT, String(enabled));
+    OverlayModule?.saveShowOnlyDuringTextInput?.(enabled);
+  }, []);
 
   const handleModeChange = useCallback((modeId: ModeId) => {
     setCurrentMode(modeId);
@@ -340,6 +354,15 @@ export default function YapifyScreen() {
     return text;
   }
 
+  function appendProcessedOutput(base: string, addition: string) {
+    const trimmedBase = base.trimEnd();
+    const trimmedAddition = addition.trim();
+    if (!trimmedBase) return trimmedAddition;
+    if (!trimmedAddition) return trimmedBase;
+    const separator = /[\n.!?]$/.test(trimmedBase) ? '\n\n' : ' ';
+    return `${trimmedBase}${separator}${trimmedAddition}`;
+  }
+
   async function runPipeline(uri: string) {
     if (!isValidApiKey(apiKey)) {
       showError('No API key -- open settings');
@@ -403,13 +426,55 @@ export default function YapifyScreen() {
     }
   }
 
+  async function handleStartAddMore() {
+    setToastAddingMore(true);
+    try {
+      await startNativeRecording();
+    } catch {
+      showError('Could not start recording');
+      setToastAddingMore(false);
+    }
+  }
+
+  async function runAddMorePipeline(uri: string) {
+    if (!toastOutput) return;
+    setToastAddMoreProcessing(true);
+    try {
+      const transcript = await transcribe(uri);
+      const added = await llm(composeSystemPrompt(modePrompts[currentMode]), transcript);
+      const appended = appendProcessedOutput(toastOutput, added);
+      setToastOutput(appended);
+      appendHistory(appended, currentMode);
+    } catch (e: any) {
+      showError(e.message || 'Add more failed');
+    } finally {
+      setToastAddingMore(false);
+      setToastAddMoreProcessing(false);
+    }
+  }
+
+  async function handleStopAddMore() {
+    try {
+      const uri = await stopNativeRecording();
+      if (!uri) {
+        showError('No audio detected');
+        setToastAddingMore(false);
+        return;
+      }
+      await runAddMorePipeline(uri);
+    } catch {
+      showError('Add more recording failed');
+      setToastAddingMore(false);
+    }
+  }
+
   async function handleInject() {
     if (!toastOutput) return;
     if (AccessibilityModule) {
       const enabled = await AccessibilityModule.isEnabled();
       setAccessibilityEnabled(Boolean(enabled));
       if (!enabled) {
-        showError('Enable Yapify in Settings > Accessibility to insert anywhere');
+        showError('Enable Yapi in Settings > Accessibility to insert anywhere');
         AccessibilityModule.openSettings();
         return;
       }
@@ -453,7 +518,7 @@ export default function YapifyScreen() {
       showError('Focus a text field in another app first');
       return;
     }
-    const ok = await AccessibilityModule.injectText('Yapify test inject');
+    const ok = await AccessibilityModule.injectText('Yapi test inject');
     showError(ok ? 'Injected test text' : 'Inject test failed');
   }
 
@@ -513,14 +578,20 @@ export default function YapifyScreen() {
             mode={currentMode}
             editing={toastEditing}
             editProcessing={toastEditProcessing}
+            addingMore={toastAddingMore}
+            addMoreProcessing={toastAddMoreProcessing}
             topPosition={toastTop}
             onInject={handleInject}
             onCopy={handleCopyOutput}
+            onAddMore={handleStartAddMore}
             onEdit={handleStartEdit}
             onStopEdit={handleStopEdit}
+            onStopAddMore={handleStopAddMore}
             onDismiss={() => {
               cancelNativeRecording();
               setToastEditing(false);
+              setToastAddMoreProcessing(false);
+              setToastAddingMore(false);
               setToastOutput(null);
             }}
           />
@@ -536,8 +607,10 @@ export default function YapifyScreen() {
         history={history}
         overlayGranted={overlayGranted}
         accessibilityEnabled={accessibilityEnabled}
+        showOnlyDuringTextInput={showOnlyDuringTextInput}
         onApiKeyChange={handleApiKeyChange}
         onGlobalPromptChange={handleGlobalPromptChange}
+        onShowOnlyDuringTextInputChange={handleShowOnlyDuringTextInputChange}
         onModePromptChange={handleModePromptChange}
         onResetModePrompt={handleResetModePrompt}
         onRestoreHistoryItem={(item) => {

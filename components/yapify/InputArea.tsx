@@ -1,5 +1,5 @@
-import { useRef, useImperativeHandle, forwardRef } from 'react';
-import { TextInput, StyleSheet, Animated } from 'react-native';
+import { useRef, useImperativeHandle, forwardRef, useState } from 'react';
+import { TextInput, StyleSheet, Animated, NativeSyntheticEvent, TextInputSelectionChangeEventData } from 'react-native';
 import { colors, fonts } from '../../constants/theme';
 
 export type InputAreaRef = {
@@ -14,11 +14,14 @@ type Props = {
 const InputArea = forwardRef<InputAreaRef, Props>(({ value, onChange }, ref) => {
   const inputRef = useRef<TextInput>(null);
   const borderColor = useRef(new Animated.Value(0)).current;
+  const [selection, setSelection] = useState({ start: 0, end: 0 });
 
   useImperativeHandle(ref, () => ({
     injectText(newText: string) {
-      const separator = value.length > 0 && !value.endsWith('\n') ? '\n\n' : '';
-      const prefix = value + separator;
+      const safeStart = Math.max(0, Math.min(selection.start, value.length));
+      const safeEnd = Math.max(safeStart, Math.min(selection.end, value.length));
+      const mergedPrefix = value.slice(0, safeStart);
+      const mergedSuffix = value.slice(safeEnd);
       const chars = newText.split('');
       let i = 0;
 
@@ -27,12 +30,14 @@ const InputArea = forwardRef<InputAreaRef, Props>(({ value, onChange }, ref) => 
 
       const tick = () => {
         if (i < chars.length) {
-          onChange(prefix + chars.slice(0, i + 1).join(''));
+          onChange(mergedPrefix + chars.slice(0, i + 1).join('') + mergedSuffix);
           i++;
           setTimeout(tick, 14);
         } else {
           Animated.timing(borderColor, { toValue: 0, duration: 300, useNativeDriver: false }).start();
           inputRef.current?.focus();
+          const cursor = safeStart + newText.length;
+          setSelection({ start: cursor, end: cursor });
         }
       };
       tick();
@@ -51,6 +56,10 @@ const InputArea = forwardRef<InputAreaRef, Props>(({ value, onChange }, ref) => 
         style={styles.input}
         value={value}
         onChangeText={onChange}
+        selection={selection}
+        onSelectionChange={(
+          event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
+        ) => setSelection(event.nativeEvent.selection)}
         multiline
         placeholder="Tap to type, or use the dot to dictate..."
         placeholderTextColor={colors.muted}
@@ -59,6 +68,8 @@ const InputArea = forwardRef<InputAreaRef, Props>(({ value, onChange }, ref) => 
     </Animated.View>
   );
 });
+
+InputArea.displayName = 'InputArea';
 
 export default InputArea;
 
