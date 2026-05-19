@@ -1,50 +1,84 @@
-# Welcome to your Expo app 👋
+# Yapify
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A voice-to-text Android app with AI processing. Tap the floating dot, speak, and your words are transcribed and reformatted by an LLM — then injected directly into any text field system-wide.
 
-## Get started
+## How it works
 
-1. Install dependencies
+1. Tap the floating teal dot to expand it
+2. Tap again to start recording
+3. Your audio is transcribed via Whisper
+4. An LLM reformats the transcript based on your selected mode
+5. The result appears in a floating card — inject it into any focused text field, copy it, or edit it with another voice recording
 
-   ```bash
-   npm install
-   ```
+The dot lives over all other apps as a foreground service, so you can use Yapify without ever leaving what you're doing.
 
-2. Start the app
+## Modes
 
-   ```bash
-   npx expo start
-   ```
+Hold and drag the dot to pick a mode:
 
-In the output, you'll find options to open the app in a
+| Mode | What it does |
+|---|---|
+| Default | Cleans up raw speech into natural prose |
+| Email | Formats as a proper email with greeting and sign-off |
+| Quick Message | Rewrites as a short, casual text |
+| AI Prompt | Executes your spoken instruction directly |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Each mode prompt is fully customizable from Settings.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## AI providers
 
-## Get a fresh project
+Yapify works with either:
+- **Groq** (`gsk_...` keys) — uses `whisper-large-v3-turbo` + `llama-3.3-70b-versatile`
+- **OpenAI** (`sk-...` keys) — uses `whisper-1` + `gpt-4o-mini`
 
-When you're ready, run:
+Your API key is stored locally in AsyncStorage and Android SharedPreferences. It is never hardcoded or sent anywhere except the provider's API.
+
+## Permissions required
+
+- `RECORD_AUDIO` — microphone access for recording
+- `SYSTEM_ALERT_WINDOW` — overlay dot that floats over other apps
+- `FOREGROUND_SERVICE_MICROPHONE` — recording from background
+- `INTERNET` — API calls to Whisper and LLM
+- Accessibility Service — for injecting text into any app's focused field
+
+## Setup
+
+1. Install the app via an EAS dev build (see below)
+2. On first launch, the onboarding flow walks you through:
+   - Entering your Groq or OpenAI API key
+   - Granting overlay permission
+   - Enabling the Yapify accessibility service
+
+## Building
+
+This project uses [EAS Build](https://docs.expo.dev/build/introduction/) for cloud compilation. Expo Go is not supported.
 
 ```bash
-npm run reset-project
+npm install
+npm install -g eas-cli
+eas login
+
+# Development build (Android)
+eas build --platform android --profile development
+
+# Preview build
+eas build --platform android --profile preview
+
+# Production build
+eas build --platform android --profile production
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+After a dev build installs, start the Metro bundler so the app can load the JS bundle:
 
-## Learn more
+```bash
+npx expo start --lan
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Tech stack
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- React Native with Expo SDK 54
+- Expo Router (file-based navigation)
+- Kotlin native modules for overlay service, accessibility injection, and clipboard
+- `expo-audio` for recording
+- `react-native-reanimated` + `react-native-gesture-handler` for FAB animations
+- AsyncStorage for settings persistence
