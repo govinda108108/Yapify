@@ -15,12 +15,16 @@ class ClipboardModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun copyText(text: String, promise: Promise) {
-        val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        if (clipboard == null) {
+        try {
+            val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (clipboard == null) {
+                promise.resolve(false)
+                return
+            }
+            clipboard.setPrimaryClip(ClipData.newPlainText("yapi", text))
+            promise.resolve(true)
+        } catch (e: Exception) {
             promise.resolve(false)
-            return
         }
-        clipboard.setPrimaryClip(ClipData.newPlainText("yapi", text))
-        promise.resolve(true)
     }
 }

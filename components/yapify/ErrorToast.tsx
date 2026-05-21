@@ -4,10 +4,11 @@ import { colors, fonts } from '../../constants/theme';
 
 type Props = {
   message: string | null;
+  success?: boolean;
   onDismiss: () => void;
 };
 
-export default function ErrorToast({ message, onDismiss }: Props) {
+export default function ErrorToast({ message, success, onDismiss }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -29,8 +30,8 @@ export default function ErrorToast({ message, onDismiss }: Props) {
   if (!message) return null;
 
   return (
-    <Animated.View style={[styles.container, { opacity }]}>
-      <Text style={styles.text}>{message}</Text>
+    <Animated.View style={[styles.container, success && styles.containerSuccess, { opacity }]}>
+      <Text style={[styles.text, success && styles.textSuccess]}>{message}</Text>
     </Animated.View>
   );
 }
@@ -52,5 +53,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 11,
     color: colors.red,
+  },
+  containerSuccess: {
+    backgroundColor: 'rgba(46,196,182,0.1)',
+    borderColor: 'rgba(46,196,182,0.3)',
+  },
+  textSuccess: {
+    color: colors.teal,
   },
 });

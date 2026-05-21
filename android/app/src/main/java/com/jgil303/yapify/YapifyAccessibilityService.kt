@@ -65,13 +65,17 @@ class YapifyAccessibilityService : AccessibilityService() {
 
         private fun resolveEditableNode(): AccessibilityNodeInfo? {
             instance?.rootInActiveWindow?.let { root ->
-                findFocusedEditableNode(root)?.let { found ->
-                    replaceLastNode(found)
-                    found.recycle()
-                }
-                findEditableNode(root)?.let { found ->
-                    replaceLastNode(found)
-                    found.recycle()
+                // Prefer focused editable; fall back to any editable.
+                // Only update lastNode if we actually find something — never overwrite with a non-match.
+                val focused = findFocusedEditableNode(root)
+                if (focused != null) {
+                    replaceLastNode(focused)
+                    focused.recycle()
+                } else {
+                    findEditableNode(root)?.let { found ->
+                        replaceLastNode(found)
+                        found.recycle()
+                    }
                 }
             }
             return lastNode?.let(AccessibilityNodeInfo::obtain)
@@ -94,7 +98,7 @@ class YapifyAccessibilityService : AccessibilityService() {
 
         private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
             if (node == null) return null
-            if (node.isEditable || node.isFocused) return AccessibilityNodeInfo.obtain(node)
+            if (node.isEditable) return AccessibilityNodeInfo.obtain(node)
             for (index in 0 until node.childCount) {
                 val match = findEditableNode(node.getChild(index))
                 if (match != null) return match

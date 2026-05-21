@@ -48,6 +48,8 @@ type Props = {
   onModeChange: (m: ModeId) => void;
   onStartRecording: () => void;
   onStopRecording: () => void;
+  onDismiss?: () => void;
+  dismissed?: boolean;
 };
 
 const FAB_SIZE = 56;
@@ -59,6 +61,7 @@ const CHIP_MODES: ModeId[] = ['default', 'email', 'quick', 'ai'];
 export default function FAB({
   fabState, currentMode, recordingSecs,
   onStateChange, onModeChange, onStartRecording, onStopRecording,
+  onDismiss, dismissed,
 }: Props) {
   const { width: sw, height: sh } = useWindowDimensions();
   const fabX = useSharedValue(sw - 24 - FAB_SIZE);
@@ -220,20 +223,52 @@ export default function FAB({
     else if (currentState === 'RECORDING') onStopRecording();
   }
 
-  // Small dot gesture (IDLE)
+  // Small dot gesture (IDLE) — tap to expand, long-press to dismiss
+  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const smallDotDismissed = useRef(false);
+
+  function scheduleDismiss() {
+    if (dismissTimer.current) clearTimeout(dismissTimer.current);
+    dismissTimer.current = setTimeout(() => {
+      dismissTimer.current = null;
+      smallDotDismissed.current = true;
+      onDismiss?.();
+    }, 700);
+  }
+
+  function cancelDismissTimer() {
+    if (dismissTimer.current) {
+      clearTimeout(dismissTimer.current);
+      dismissTimer.current = null;
+    }
+  }
+
+  function handleSmallDotEnd(dx: number, dy: number) {
+    cancelDismissTimer();
+    if (smallDotDismissed.current) {
+      smallDotDismissed.current = false;
+      return;
+    }
+    if (dx <= 5 && dy <= 5) onStateChange('EXPANDED');
+  }
+
   const smallDotGesture = Gesture.Pan()
     .minDistance(0)
+    .onBegin(() => {
+      'worklet';
+      runOnJS(scheduleDismiss)();
+    })
     .onChange((e) => {
       'worklet';
       const dx = Math.abs(e.translationX), dy = Math.abs(e.translationY);
       if (dx > 5 || dy > 5) {
+        runOnJS(cancelDismissTimer)();
         moveFab(fabX.value + e.changeX, fabY.value + e.changeY);
       }
     })
     .onEnd((e) => {
       'worklet';
-      const dx = Math.abs(e.translationX), dy = Math.abs(e.translationY);
-      if (dx <= 5 && dy <= 5) runOnJS(onStateChange)('EXPANDED');
+      runOnJS(handleSmallDotEnd)(Math.abs(e.translationX), Math.abs(e.translationY));
     });
 
   // Big dot gesture
@@ -298,6 +333,14 @@ export default function FAB({
     opacity: trayOpacity.value,
   }));
 
+  const timerWrapStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: fabY.value - 28,
+    left: fabX.value,
+    width: FAB_SIZE,
+    alignItems: 'center',
+  }));
+
   return (
     <>
       {/* Mode tray — screen-level absolute, not inside FAB container */}
@@ -312,10 +355,13 @@ export default function FAB({
         ))}
       </Reanimated.View>
 
+      {/* Timer — screen-level so it never clips on Android */}
+      <Reanimated.View style={timerWrapStyle} pointerEvents="none">
+        {isRecording && <Text style={styles.timerText}>{timerStr}</Text>}
+      </Reanimated.View>
+
       {/* FAB container */}
       <Reanimated.View style={fabContainerStyle}>
-        {isRecording && <Text style={styles.timer}>{timerStr}</Text>}
-
         {fabState !== 'IDLE' && (
           <GestureDetector gesture={bigDotGesture}>
             <Reanimated.View style={[
@@ -331,9 +377,7 @@ export default function FAB({
                 }]} />
               ))}
               {isProcessing ? (
-                <Animated.View style={processingSpinStyle}>
-                  <Image source={require('../../assets/mic-stars.png')} style={styles.logoIcon} />
-                </Animated.View>
+                <Animated.View style={[processingSpinStyle, styles.processingArc]} />
               ) : currentMode === 'default' ? (
                 <Image source={require('../../assets/mic-stars.png')} style={styles.logoIcon} />
               ) : (
@@ -343,7 +387,7 @@ export default function FAB({
           </GestureDetector>
         )}
 
-        {fabState === 'IDLE' && (
+        {fabState === 'IDLE' && !dismissed && (
           <GestureDetector gesture={smallDotGesture}>
             <Reanimated.View style={styles.smallDotHitArea}>
               <View style={styles.smallDot} />
@@ -407,8 +451,16 @@ const styles = StyleSheet.create({
   },
   bigDotProcessing: {
     backgroundColor: colors.surface2,
-    borderWidth: 2,
-    borderColor: colors.teal,
+    shadowColor: 'transparent',
+    elevation: 0,
+  },
+  processingArc: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2.5,
+    borderColor: '#ffffff',
+    borderTopColor: 'transparent',
   },
   smallDot: {
     width: DOT_SIZE,
@@ -473,10 +525,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
   },
-  timer: {
-    position: 'absolute',
-    top: -28,
-    alignSelf: 'center',
+  timerText: {
     fontFamily: fonts.mono,
     fontSize: 13,
     color: colors.red,

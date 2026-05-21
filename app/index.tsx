@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, StyleSheet, NativeModules, AppState, DeviceEventEmitter,
-  Keyboard, useWindowDimensions, SafeAreaView,
+  Keyboard, useWindowDimensions, SafeAreaView, TouchableOpacity,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
@@ -65,6 +65,8 @@ export default function YapifyScreen() {
   const [toastAddMoreProcessing, setToastAddMoreProcessing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [globalPrompt, setGlobalPrompt] = useState('');
   const [inputText, setInputText] = useState('');
@@ -74,6 +76,7 @@ export default function YapifyScreen() {
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(false);
   const [showOnlyDuringTextInput, setShowOnlyDuringTextInput] = useState(false);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
+  const [fabDismissed, setFabDismissed] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -142,6 +145,7 @@ export default function YapifyScreen() {
       setShowOnlyDuringTextInput(savedShowOnlyDuringInput);
       OverlayModule?.saveShowOnlyDuringTextInput?.(savedShowOnlyDuringInput);
       if (!onboardingDone) setOnboardingVisible(true);
+      else setSettingsOpen(true);
     });
 
     refreshNativeAccess();
@@ -239,6 +243,7 @@ export default function YapifyScreen() {
       return;
     }
     setOnboardingVisible(false);
+    setSettingsOpen(true);
     AsyncStorage.setItem(STORAGE_ONBOARDING_DONE, 'true');
   }, [accessibilityEnabled, apiKey, overlayGranted]);
 
@@ -256,6 +261,12 @@ export default function YapifyScreen() {
     setError(msg);
     if (errorTimer.current) clearTimeout(errorTimer.current);
     errorTimer.current = setTimeout(() => setError(null), 3000);
+  }
+
+  function showSuccess(msg: string) {
+    setSuccessMsg(msg);
+    if (successTimer.current) clearTimeout(successTimer.current);
+    successTimer.current = setTimeout(() => setSuccessMsg(null), 2000);
   }
 
   async function startNativeRecording() {
@@ -470,35 +481,31 @@ export default function YapifyScreen() {
 
   async function handleInject() {
     if (!toastOutput) return;
+    const text = toastOutput;
+    setToastOutput(null);
+
     if (AccessibilityModule) {
       const enabled = await AccessibilityModule.isEnabled();
       setAccessibilityEnabled(Boolean(enabled));
-      if (!enabled) {
-        showError('Enable Yapi in Settings > Accessibility to insert anywhere');
-        AccessibilityModule.openSettings();
-        return;
-      }
-      const hasField = await AccessibilityModule.hasActiveField();
-      if (hasField) {
-        const ok = await AccessibilityModule.injectText(toastOutput);
-        if (ok) {
-          setToastOutput(null);
-          return;
+      if (enabled) {
+        const hasField = await AccessibilityModule.hasActiveField();
+        if (hasField) {
+          const ok = await AccessibilityModule.injectText(text);
+          if (ok) return;
         }
       }
     }
-    setToastOutput(null);
-    inputRef.current?.injectText(toastOutput);
+    inputRef.current?.injectText(text);
   }
 
   async function handleCopyOutput() {
     if (!toastOutput) return;
     const ok = await ClipboardModule?.copyText?.(toastOutput);
     if (!ok) {
-      showError('Could not copy text');
+      showError('Could not copy');
       return;
     }
-    showError('Copied');
+    showSuccess('Copied');
   }
 
   async function handleTestInject() {
@@ -564,11 +571,23 @@ export default function YapifyScreen() {
           onModeChange={handleModeChange}
           onStartRecording={handleStartRecording}
           onStopRecording={handleStopRecording}
+          dismissed={fabDismissed}
+          onDismiss={() => setFabDismissed(true)}
         />
 
         <View style={styles.pillAnchor}>
           <StatusPill message={statusMsg} />
         </View>
+
+        {fabDismissed && (
+          <TouchableOpacity
+            style={styles.restoreFab}
+            onPress={() => setFabDismissed(false)}
+            activeOpacity={0.6}
+          >
+            <View style={styles.restoreDot} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {toastOutput !== null && (
@@ -616,6 +635,7 @@ export default function YapifyScreen() {
         onRestoreHistoryItem={(item) => {
           setToastOutput(item.output);
           handleModeChange(item.mode);
+          setSettingsOpen(false);
         }}
         onClearHistory={() => persistHistory([])}
         onReopenOnboarding={handleReopenOnboarding}
@@ -637,6 +657,7 @@ export default function YapifyScreen() {
       />
 
       <ErrorToast message={error} onDismiss={() => setError(null)} />
+      <ErrorToast message={successMsg} success onDismiss={() => setSuccessMsg(null)} />
     </SafeAreaView>
   );
 }
@@ -652,5 +673,23 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
+  },
+  restoreFab: {
+    position: 'absolute',
+    bottom: 28,
+    right: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: 'rgba(46,196,182,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  restoreDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: 'rgba(46,196,182,0.5)',
   },
 });

@@ -99,6 +99,8 @@ class OverlayService : Service() {
         }
     }
 
+    private val smallDotDismissRunnable = Runnable { minimise() }
+
     override fun onBind(intent: Intent?) = null
 
     override fun onCreate() {
@@ -193,19 +195,25 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     startX = e.rawX; startY = e.rawY
                     fabInitX = fabParams.x; fabInitY = fabParams.y
-                    moved = false; true
+                    moved = false
+                    main.postDelayed(smallDotDismissRunnable, 700L)
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - startX; val dy = e.rawY - startY
-                    if (!moved && (kotlin.math.abs(dx) > 5.dp || kotlin.math.abs(dy) > 5.dp)) moved = true
+                    if (!moved && (kotlin.math.abs(dx) > 5.dp || kotlin.math.abs(dy) > 5.dp)) {
+                        moved = true
+                        main.removeCallbacks(smallDotDismissRunnable)
+                    }
                     if (moved) {
-                        fabParams.x = (fabInitX - dx).toInt().coerceAtLeast(0) // Gravity.END: right→decrease x
+                        fabParams.x = (fabInitX - dx).toInt().coerceAtLeast(0)
                         fabParams.y = (fabInitY + dy).toInt().coerceAtLeast(0)
                         runCatching { wm.updateViewLayout(fabContainer, fabParams) }
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    main.removeCallbacks(smallDotDismissRunnable)
                     if (!moved) transitionTo(State.EXPANDED)
                     true
                 }
@@ -400,7 +408,7 @@ class OverlayService : Service() {
         }
 
         // Minimise chip at bottom
-        val minimiseChip = buildSpecialChip("⊙ Minimise")
+        val minimiseChip = buildSpecialChip("⊙  Hide dot")
         tray.addView(minimiseChip, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
@@ -543,14 +551,25 @@ class OverlayService : Service() {
     }
 
     private fun minimise() {
-        minimised = false
-        transitionTo(State.IDLE)
+        minimised = true
+        dismissModeTray()
+        stopRipple()
+        fabSpinnerAnim?.cancel()
+        state = State.IDLE
+        runCatching { wm.removeView(fabContainer) }
+        // Notification: tap to restore
+        val restoreIntent = Intent(this, OverlayService::class.java).apply { action = ACTION_RESTORE }
+        val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        else PendingIntent.FLAG_UPDATE_CURRENT
+        val restorePi = PendingIntent.getService(this, 1, restoreIntent, pendingFlags)
         val ch = "yapify_overlay"
         getSystemService(NotificationManager::class.java).notify(1,
             Notification.Builder(this, ch)
                 .setContentTitle("Yapi")
-                .setContentText("Tap dot to expand  •  Hold to change mode")
+                .setContentText("Dot hidden — tap to show")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentIntent(restorePi)
                 .build())
     }
 
@@ -559,7 +578,6 @@ class OverlayService : Service() {
         minimised = false
         runCatching { wm.addView(fabContainer, fabParams) }
         buildSmallDot()
-        // Restore notification
         val ch = "yapify_overlay"
         getSystemService(NotificationManager::class.java).notify(1,
             Notification.Builder(this, ch)
@@ -874,19 +892,21 @@ class OverlayService : Service() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        topRight.addView(ImageView(this).apply {
-            setImageResource(android.R.drawable.ic_menu_share)
-            setColorFilter(Color.parseColor(C_TEAL))
+        topRight.addView(TextView(this).apply {
+            text = "⧉"; textSize = 13f; gravity = Gravity.CENTER
+            setTextColor(Color.parseColor(C_TEAL))
             background = GradientDrawable().apply {
                 setColor(Color.parseColor(C_SURFACE2))
                 cornerRadius = 14 * d
                 setStroke(1.dp, Color.parseColor("#2f2ec4b6"))
             }
-            val pad = 6.dp; setPadding(pad, pad, pad, pad)
+            val pad = 4.dp; setPadding(pad, pad, pad, pad)
             setOnClickListener {
-                val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("yapi", currentOutput))
-                Toast.makeText(this@OverlayService, "Copied", Toast.LENGTH_SHORT).show()
+                try {
+                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                    clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("yapi", currentOutput))
+                    Toast.makeText(this@OverlayService, "Copied", Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {}
             }
         }, LinearLayout.LayoutParams(28.dp, 28.dp).apply { marginEnd = 8.dp })
         val modeLabel = if (currentMode.emoji.isEmpty()) currentMode.name
