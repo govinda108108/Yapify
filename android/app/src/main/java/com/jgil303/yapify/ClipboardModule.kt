@@ -16,7 +16,8 @@ class ClipboardModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun copyText(text: String, promise: Promise) {
         try {
-            val clipboard = reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val context = currentActivity ?: reactContext
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             if (clipboard == null) {
                 promise.resolve(false)
                 return

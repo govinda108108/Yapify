@@ -483,29 +483,25 @@ export default function YapifyScreen() {
     if (!toastOutput) return;
     const text = toastOutput;
     setToastOutput(null);
-
-    if (AccessibilityModule) {
-      const enabled = await AccessibilityModule.isEnabled();
-      setAccessibilityEnabled(Boolean(enabled));
-      if (enabled) {
-        const hasField = await AccessibilityModule.hasActiveField();
-        if (hasField) {
-          const ok = await AccessibilityModule.injectText(text);
-          if (ok) return;
-        }
-      }
-    }
+    // In-app insert always goes to the InputArea directly.
+    // AccessibilityModule injection is for the overlay only — when the app is
+    // in the foreground the service finds the Yapify InputArea itself, causing
+    // placeholder text to be included as existing content.
     inputRef.current?.injectText(text);
   }
 
   async function handleCopyOutput() {
     if (!toastOutput) return;
-    const ok = await ClipboardModule?.copyText?.(toastOutput);
-    if (!ok) {
+    try {
+      const ok = await ClipboardModule?.copyText?.(toastOutput);
+      if (!ok) {
+        showError('Could not copy');
+        return;
+      }
+      showSuccess('Copied');
+    } catch {
       showError('Could not copy');
-      return;
     }
-    showSuccess('Copied');
   }
 
   async function handleTestInject() {
